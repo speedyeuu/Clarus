@@ -1,5 +1,5 @@
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import asyncio
 import sys
 import os
@@ -19,6 +19,103 @@ from scoring.indicators import score_ff_event, score_sentiment, score_trend, sco
 from scoring.cot_combined import score_cot_combined
 from scoring.engine import calculate_total_score
 
+# ============================================================
+# CARRY-FORWARD KONFIGURACE
+# ============================================================
+# Každý indikátor má:
+#   max_days  ... kolik dní je hodnota platná (pak se nuluje)
+#   decay     ... True = lineární pokles k 0; False = plná hodnota až do konce
+
+CARRY_FORWARD_CONFIG = {
+    # FLAT — platí naplno, pak 0 (sazba je fyzická realita, COT přijde nový za týden...)
+    "interest_rates":   {"max_days": 45, "decay": False},
+    "cot":              {"max_days": 7,  "decay": False},
+    "retail_sentiment": {"max_days": 3,  "decay": False},
+    "seasonality":      {"max_days": 30, "decay": False},
+    # DECAY — lineárně klesá k 0 (surprise stárne, trh ho přehodnocuje)
+    "inflation":        {"max_days": 30, "decay": True},
+    "gdp":              {"max_days": 60, "decay": True},
+    "labor":            {"max_days": 30, "decay": True},
+    "spmi":             {"max_days": 30, "decay": True},
+    "mpmi":             {"max_days": 30, "decay": True},
+    "retail_sales":     {"max_days": 30, "decay": True},
+    # trend → NO CARRY: přepočítává se každý den čerstvě z cen
+}
+
+
+async def fetch_previous_scores(pair: str = "EURUSD") -> dict:
+    """
+    Natáhne poslední platné skóre z tabulky daily_scores pro každý indikátor
+    a aplikuje carry-forward logiku:
+      - FLAT indikátory: plná hodnota po celou dobu max_days
+      - DECAY indikátory: lineární pokles z plné hodnoty na 0 za max_days dní
+
+    Výsledný dict slouží jako baseline pro dnešní výpočet.
+    Dnešní FF eventy (CPI, NFP...) pak přepíší příslušné klíče čerstvými hodnotami.
+    """
+    db = get_supabase()
+    today = date.today()
+
+    # Stáhneme max 61 dní zpět (GDP carry je nejdelší = 60 dní)
+    cutoff = (today - timedelta(days=61)).isoformat()
+
+    try:
+        result = (
+            db.table("daily_scores")
+            .select(
+                "date, score_interest_rates, score_inflation, score_gdp, "
+                "score_labor, score_cot, score_spmi, score_mpmi, "
+                "score_retail_sales, score_retail_sentiment, score_seasonality"
+            )
+            .eq("pair", pair)
+            .gte("date", cutoff)
+            .order("date", desc=True)
+            .execute()
+        )
+    except Exception as e:
+        logger.warning(f"Nepodařilo se načíst carry-forward skóre: {e}")
+        return {}
+
+    if not result.data:
+        logger.info("Žádná historická data pro carry-forward — začínám od nuly.")
+        return {}
+
+    scores = {}
+
+    for indicator, config in CARRY_FORWARD_CONFIG.items():
+        col_name = f"score_{indicator}"
+        max_days = config["max_days"]
+        use_decay = config["decay"]
+
+        # Procházíme záznamy od nejčerstvějšího; hledáme první nenulový
+        for row in result.data:
+            val = row.get(col_name)
+            if val is None:
+                continue  # Tento den neměl data, zkusíme starší
+
+            row_date = date.fromisoformat(row["date"])
+            age_days = (today - row_date).days
+
+            if age_days > max_days:
+                # Data jsou příliš stará → nepoužijeme, zůstane 0.0
+                logger.debug(f"Carry-forward [{indicator}]: data stará {age_days}d > limit {max_days}d → skipped")
+                break
+
+            if use_decay:
+                # Lineární decay: plná hodnota v den 0, nula v den max_days
+                decay_factor = max(0.0, 1.0 - (age_days / max_days))
+                carried = round(val * decay_factor, 4)
+                logger.info(f"Carry-forward [{indicator}]: {val:.2f} × {decay_factor:.2f} (age {age_days}d) = {carried:.2f}")
+            else:
+                # Flat: plná hodnota po celou dobu
+                carried = val
+                logger.info(f"Carry-forward [{indicator}]: {val:.2f} flat (age {age_days}d / max {max_days}d)")
+
+            scores[indicator] = carried
+            break
+
+    return scores
+
 async def run_daily_update(pair: str = "EURUSD"):
     """
     Hlavní Pipeline aplikace (Fáze 3). Spouští se každý den v 19:00 UTC pro každý aktivní pár.
@@ -34,7 +131,10 @@ async def run_daily_update(pair: str = "EURUSD"):
     db = get_supabase()
     
     # Slovník pro posbíraná skóre (scale: -3.0 to +3.0)
-    scores = {}
+    # Načteme poslední platné hodnoty z DB jako baseline (carry-forward)
+    # Dnešní FF eventy je pak přepíší pro příslušné indikátory
+    scores = await fetch_previous_scores(pair)
+    logger.info(f"Carry-forward baseline načten: {len(scores)} indikátorů")
     
     # ---------------------------------------------------------
     # KROK 1: KONTINUÁLNÍ INDIKÁTORY

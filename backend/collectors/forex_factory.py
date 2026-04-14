@@ -18,24 +18,80 @@ class FFEvent(BaseModel):
     indicator_key: Optional[str] = None
 
 # Mapování názvů z Forex Factory na naše interní klíče indikátorů
+# Porovnávání probíhá přes `key.lower() in title.lower()` — stačí substring.
 TITLE_TO_INDICATOR = {
-    "CPI m/m": "inflation",
-    "CPI y/y": "inflation",
-    "Core CPI m/m": "inflation",
-    "Non-Farm Employment Change": "labor",
-    "Unemployment Rate": "labor",
-    "Advance GDP q/q": "gdp",
-    "Flash GDP q/q": "gdp",
-    "Flash Manufacturing PMI": "mpmi",
-    "Flash Services PMI": "spmi",
-    "ISM Manufacturing PMI": "mpmi",
-    "ISM Services PMI": "spmi",
-    "Retail Sales m/m": "retail_sales",
-    "Core Retail Sales m/m": "retail_sales",
-    "Federal Funds Rate": "interest_rates",
-    "Main Refinancing Rate": "interest_rates",
-    "Monetary Policy Statement": "interest_rates",
-    "FOMC Statement": "interest_rates",
+    # ── INFLATION ────────────────────────────────────────────────────────
+    "CPI m/m":                       "inflation",
+    "CPI y/y":                       "inflation",
+    "Core CPI m/m":                  "inflation",
+    "Core CPI y/y":                  "inflation",
+    "PPI m/m":                       "inflation",
+    "Core PPI m/m":                  "inflation",
+    "PPI y/y":                       "inflation",
+    "Core PCE Price Index":          "inflation",
+    "PCE Price Index":               "inflation",
+    "Import Prices m/m":             "inflation",
+
+    # ── LABOR ─────────────────────────────────────────────────────────────
+    "Non-Farm Employment Change":    "labor",
+    "Unemployment Rate":             "labor",
+    "ADP Non-Farm Employment":       "labor",
+    "JOLTS Job Openings":            "labor",
+    "Initial Jobless Claims":        "labor",
+    "Continuing Jobless Claims":     "labor",
+    "Average Hourly Earnings":       "labor",
+    "Claimant Count Change":         "labor",
+    "Employment Change":             "labor",
+    "Participation Rate":            "labor",
+
+    # ── GDP / AKTIVITA ───────────────────────────────────────────────────
+    "Advance GDP q/q":               "gdp",
+    "Flash GDP q/q":                 "gdp",
+    "Prelim GDP q/q":                "gdp",
+    "Second Estimate GDP":           "gdp",
+    "Final GDP q/q":                 "gdp",
+    "GDP q/q":                       "gdp",
+    "Trade Balance":                 "gdp",
+    "Current Account":               "gdp",
+    "German ZEW Economic Sentiment": "gdp",
+    "ZEW Economic Sentiment":        "gdp",
+    "German Ifo Business Climate":   "gdp",
+    "Ifo Business Climate":          "gdp",
+
+    # ── MANUFACTURING PMI ────────────────────────────────────────────────
+    "Flash Manufacturing PMI":       "mpmi",
+    "ISM Manufacturing PMI":         "mpmi",
+    "Manufacturing PMI":             "mpmi",
+    "Chicago PMI":                   "mpmi",
+    "Empire State Manufacturing":    "mpmi",
+    "Philly Fed Manufacturing":      "mpmi",
+    "Philadelphia Fed":              "mpmi",
+
+    # ── SERVICES PMI ─────────────────────────────────────────────────────
+    "Flash Services PMI":            "spmi",
+    "ISM Services PMI":              "spmi",
+    "Services PMI":                  "spmi",
+    "Flash Composite PMI":           "spmi",
+    "Composite PMI":                 "spmi",
+
+    # ── RETAIL SALES ─────────────────────────────────────────────────────
+    "Retail Sales m/m":              "retail_sales",
+    "Core Retail Sales m/m":         "retail_sales",
+    "Retail Sales y/y":              "retail_sales",
+
+    # ── INTEREST RATES / CB ──────────────────────────────────────────────
+    "Federal Funds Rate":            "interest_rates",
+    "Main Refinancing Rate":         "interest_rates",
+    "Deposit Facility Rate":         "interest_rates",
+    "Monetary Policy Statement":     "interest_rates",
+    "FOMC Statement":                "interest_rates",
+    "Rate Statement":                "interest_rates",
+    "ECB Press Conference":          "interest_rates",
+    "FOMC Press Conference":         "interest_rates",
+    "FOMC Meeting Minutes":          "interest_rates",
+    "ECB Meeting Accounts":          "interest_rates",
+    "Fed Chair":                     "interest_rates",
+    "ECB President":                 "interest_rates",
 }
 
 def map_ff_title_to_indicator(title: str) -> Optional[str]:
