@@ -14,7 +14,8 @@ from collectors.sentiment import fetch_retail_sentiment
 from collectors.price import fetch_historical_ohlc
 from collectors.polymarket import fetch_polymarket_economics, extract_signal_from_polymarket
 
-from scoring.normalizer import get_normalization_stats
+from scoring.normalizer import get_normalization_stats, parse_forex_factory_value
+from scheduler.update_normalization_stats import update_normalization_stats
 from scoring.indicators import score_ff_event, score_sentiment, score_trend, score_seasonality
 from scoring.cot_combined import score_cot_combined
 from scoring.engine import calculate_total_score
@@ -209,13 +210,24 @@ async def run_daily_update(pair: str = "EURUSD"):
         # Pro případ, že by ve stejný den bylo víc reports stejné kategorie, uděláme průměr (zjednodušeně si ponecháme poslední)
         scores[ev.indicator_key] = event_score
         
+        # Parsujeme actual/forecast jako floaty, aby se dala počítat surprise
+        actual_float = parse_forex_factory_value(ev.actual)
+        forecast_float = parse_forex_factory_value(ev.forecast)
+        previous_float = parse_forex_factory_value(ev.previous) if ev.previous else None
+        surprise_float = (
+            round(actual_float - forecast_float, 6)
+            if actual_float is not None and forecast_float is not None
+            else None
+        )
+
         ff_readings_to_save.append({
             "date": today_date,
             "indicator_name": ev.indicator_key,
             "pair": pair,
-            "actual": ev.actual,
-            "forecast": ev.forecast,
-            "previous": ev.previous,
+            "actual": actual_float,
+            "forecast": forecast_float,
+            "previous": previous_float,
+            "surprise": surprise_float,
             "raw_score": event_score,
             "source": "forex_factory"
         })
@@ -302,6 +314,16 @@ async def run_daily_update(pair: str = "EURUSD"):
         
     except Exception as e:
         logger.error(f"Nepodařilo se dokončit predikce nebo uložit nadcházející události: {e}")
+
+    # ---------------------------------------------------------
+    # KROK 7: PŘEPOČET NORMALIZAČNÍCH STATISTIK
+    # ---------------------------------------------------------
+    # Spustí se automaticky po každém pipeline runu.
+    # Přepočítá mean_surprise + std_surprise pro indikátory s >= 10 vzorky.
+    try:
+        await update_normalization_stats(pair)
+    except Exception as e:
+        logger.error(f"Chyba při aktualizaci normalizačních statistik: {e}")
 
     logger.info("=== Daily Update dokončen ===")
 
