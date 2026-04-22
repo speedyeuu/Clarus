@@ -53,8 +53,8 @@
            │ Sběr dat (každý večer 19:00 UTC)
            │
 ┌──────────┴─────────────────────────────────────────────────┐
-│                  COLLECTORS (Python)                        │
-│                                                             │
+│                  COLLECTORS (Python)                       │
+│                                                            │
 │  ForexFactory   CFTC.gov   Alpha Vantage   EODHD           │
 │  MyFXBook       Polymarket  EURIBOR                        │
 └────────────────────────────────────────────────────────────┘

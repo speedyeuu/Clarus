@@ -30,7 +30,7 @@ async def get_score_history(days: int = 30, pair: str = "EURUSD"):
     db = get_supabase()
     result = (
         db.table("daily_scores")
-        .select("date, total_score, label, score_interest_rates, score_inflation, score_gdp, score_labor, score_cot, score_spmi, score_mpmi, score_retail_sales, score_trend, score_retail_sentiment, score_seasonality")
+        .select("pair, date, total_score, label, score_interest_rates, score_inflation, score_gdp, score_labor, score_cot, score_spmi, score_mpmi, score_retail_sales, score_trend, score_retail_sentiment, score_seasonality")
         .eq("pair", pair)
         .gte("date", cutoff)
         .order("date", desc=False)

@@ -1,19 +1,21 @@
 import ScoreOverview from "@/components/ScoreOverview";
 import ScoreChart from "@/components/ScoreChart";
 import EventsPanel from "@/components/EventsPanel";
+import IndicatorHistoryChart from "@/components/IndicatorHistoryChart";
 import { fetchLatestScore, fetchScoreHistory, fetchPredictions, fetchUpcomingEvents } from "@/lib/api";
+import type { DailyScore, Prediction, UpcomingEvent } from "@/lib/types";
 
 // Next.js serverový komponent
 export default async function DashboardPage() {
   
   // Tím že to běží na serveru zavoláme náš FastAPI backend paralelně 
   // a teprve s výsledkem vykreslíme stránku bez blikání = super rychlé.
-  let today_score = null;
-  let history = [];
-  let predictions = [];
-  let events = [];
+  let today_score: DailyScore | null = null;
+  let history: DailyScore[] = [];
+  let predictions: Prediction[] = [];
+  let events: UpcomingEvent[] = [];
   
-  let error_msg = null;
+  let error_msg: string | null = null;
 
   try {
     const [latestRes, historyRes, predRes, eventsRes] = await Promise.all([
@@ -88,8 +90,25 @@ export default async function DashboardPage() {
           <ScoreOverview score={today_score} />
 
           {/* Right: Chart + Events */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 }}>
             <ScoreChart history={history} predictions={predictions} />
+            
+            {/* Vložené sekundární grafy pro Retail a COT */}
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", width: "100%" }}>
+              <IndicatorHistoryChart 
+                title="Retail Sentiment" 
+                dataKey="score_retail_sentiment"
+                history={history} 
+                description="Pozice drobných traderů na EUR/USD (z OANDA)"
+              />
+              <IndicatorHistoryChart 
+                title="COT Bias" 
+                dataKey="score_cot"
+                history={history} 
+                description="Pozice velkých hráčů (Non-Commercial long/short ratio z CME)"
+              />
+            </div>
+
             <EventsPanel events={events} />
           </div>
         </div>

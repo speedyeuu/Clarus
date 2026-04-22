@@ -15,8 +15,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="EUR/USD Fundamental Analyzer API",
-    description="Backend pro fundamentální scoring EUR/USD páru",
+    title="Clarus API",
+    description="Backend pro Clarus – fundamentální scoring EUR/USD páru",
     version="1.0.0",
     lifespan=lifespan,
 )

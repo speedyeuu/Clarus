@@ -1,3 +1,5 @@
+import type { DailyScore, Prediction, UpcomingEvent, AutoresearchLog } from "./types";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function apiGet<T>(path: string): Promise<T> {
@@ -9,31 +11,31 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function fetchLatestScore() {
-  return apiGet("/api/score/latest");
+  return apiGet<DailyScore>("/api/score/latest");
 }
 
 export async function fetchScoreHistory(days = 30) {
-  return apiGet(`/api/score/history?days=${days}`);
+  return apiGet<DailyScore[]>(`/api/score/history?days=${days}`);
 }
 
 export async function fetchPredictions() {
-  return apiGet("/api/predictions/");
+  return apiGet<Prediction[]>("/api/predictions/");
 }
 
 export async function fetchPredictionAccuracy(days = 30) {
-  return apiGet(`/api/predictions/accuracy?days=${days}`);
+  return apiGet<Record<string, number>>(`/api/predictions/accuracy?days=${days}`);
 }
 
 export async function fetchUpcomingEvents(days = 7) {
-  return apiGet(`/api/events/upcoming?days=${days}`);
+  return apiGet<UpcomingEvent[]>(`/api/events/upcoming?days=${days}`);
 }
 
 export async function fetchAutoresearchLog() {
-  return apiGet("/api/autoresearch/log");
+  return apiGet<AutoresearchLog[]>("/api/autoresearch/log");
 }
 
 export async function fetchPendingProposals() {
-  return apiGet("/api/autoresearch/pending");
+  return apiGet<AutoresearchLog[]>("/api/autoresearch/pending");
 }
 
 export async function approveProposal(logId: string, approved: boolean) {

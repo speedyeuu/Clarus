@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DailyScore, Prediction, getScoreColor } from "@/lib/types";
 
 interface ChartPoint {
@@ -18,9 +18,13 @@ interface Props {
 
 export default function ScoreChart({ history, predictions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [range, setRange] = useState<"1W" | "1M">("1M");
+
+  const daysToSlice = range === "1W" ? 7 : 30;
+  const filteredHistory = history.slice(-daysToSlice);
 
   // Připraví data pro chart
-  const historyPoints: ChartPoint[] = history.map((d) => ({
+  const historyPoints: ChartPoint[] = filteredHistory.map((d) => ({
     date: d.date,
     value: d.total_score,
   }));
@@ -45,9 +49,41 @@ export default function ScoreChart({ history, predictions }: Props) {
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
-  // Y scale: -3 to +3
-  const yMin = -3, yMax = 3;
+  // Extrémně dynamická Y osa pro maximální roztažení rozdílů
+  const allValues = allPoints.flatMap((p) => [p.value, p.low ?? p.value, p.high ?? p.value]);
+  const minVal = allValues.length > 0 ? Math.min(...allValues) : -3;
+  const maxVal = allValues.length > 0 ? Math.max(...allValues) : 3;
+
+  const valueRange = maxVal > minVal ? maxVal - minVal : 1;
+  // Snížíme padding jen na 5 % pro vizuální hezkost rámečku (aby kolečko na konci nebylo zaříznuté)
+  const yMin = minVal - valueRange * 0.05;
+  const yMax = maxVal + valueRange * 0.05;
+
   const yScale = (v: number) => PAD.top + ((yMax - v) / (yMax - yMin)) * innerH;
+
+  // Výpočet hezkých značek na ose Y, podporující i malá desetinná čísla
+  const tickRange = yMax - yMin;
+  const roughStep = tickRange / 5;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep || 1)));
+  const normalizedStep = roughStep / magnitude;
+  
+  let niceStep = 1;
+  if (normalizedStep < 1.5) niceStep = 1;
+  else if (normalizedStep < 3) niceStep = 2;
+  else if (normalizedStep < 7.5) niceStep = 5;
+  else niceStep = 10;
+  niceStep *= magnitude;
+
+  const yTicks: number[] = [];
+  const startTick = Math.ceil(yMin / niceStep) * niceStep;
+  for (let i = startTick; i <= yMax; i += niceStep) {
+    yTicks.push(Number(i.toFixed(6))); // toFixed eliminuje plovoucí odchylky
+  }
+  // Vynutíme 0
+  if (!yTicks.some(t => Math.abs(t) < 1e-6) && yMin <= 0 && yMax >= 0) {
+    yTicks.push(0);
+    yTicks.sort((a, b) => a - b);
+  }
 
   // X scale
   const xScale = (i: number, total: number) => PAD.left + (i / (total - 1)) * innerW;
@@ -83,6 +119,32 @@ export default function ScoreChart({ history, predictions }: Props) {
 
   const changeColor = change24h > 0 ? "var(--bullish)" : change24h < 0 ? "var(--bearish)" : "var(--neutral)";
 
+  const handleDownloadCsv = () => {
+    const pairName = history.length > 0 && history[0].pair ? history[0].pair : "EUR/USD";
+    
+    // Vytvoření CSV obsahu - Excel v CZ/EU potřebuje jako oddělovač středník (;)
+    let csvContent = `Clarus Trading Software - Export dat pro par: ${pairName}\n`;
+    csvContent += `Datum;Overall Score\n`;
+    
+    // Sloupce dat (oddělené středníkem)
+    history.forEach((d) => {
+      // Skóre exportujeme s desetinnou čárkou pro jistotu, aby v něm Excel viděl funkční čísla
+      const localizedScore = String(d.total_score).replace(".", ",");
+      csvContent += `${d.date};${localizedScore}\n`;
+    });
+
+    // BOM (Byte Order Mark) hlavička řekne Excelu, že to je UTF-8 dokument a nepokazí diakritiku
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `clarus_${pairName}_export.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="card animate-slide-up" style={{ animationDelay: "0.1s" }}>
       <div className="card-header">
@@ -111,25 +173,40 @@ export default function ScoreChart({ history, predictions }: Props) {
 
           {/* Time range buttons */}
           <div style={{ display: "flex", gap: "4px" }}>
-            {["1W", "1M", "3M"].map((range) => (
+            {["1W", "1M"].map((r) => (
               <button
-                key={range}
-                disabled={range === "3M"}
+                key={r}
+                onClick={() => setRange(r as "1W" | "1M")}
                 style={{
                   padding: "3px 10px",
                   borderRadius: "5px",
                   border: "1px solid var(--border)",
-                  background: range === "1M" ? "var(--bg-elevated)" : "transparent",
-                  color: range === "3M" ? "var(--text-muted)" : range === "1M" ? "var(--text-primary)" : "var(--text-secondary)",
+                  background: range === r ? "var(--bg-elevated)" : "transparent",
+                  color: range === r ? "var(--text-primary)" : "var(--text-secondary)",
                   fontSize: "12px", fontWeight: 500,
-                  cursor: range === "3M" ? "not-allowed" : "pointer",
-                  opacity: range === "3M" ? 0.4 : 1,
+                  cursor: "pointer",
                   transition: "all 0.15s",
                 }}
               >
-                {range}
+                {r}
               </button>
             ))}
+            <button
+              onClick={handleDownloadCsv}
+              title="Stáhnout za 1 měsíc (CSV)"
+              style={{
+                display: "flex", alignItems: "center", gap: "6px",
+                marginLeft: "8px", padding: "3px 10px",
+                borderRadius: "5px", border: "1px solid var(--border)",
+                background: "rgba(16, 185, 129, 0.1)", // mírně nazelenalé
+                color: "var(--bullish)",
+                fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              .CSV
+            </button>
           </div>
         </div>
       </div>
@@ -142,7 +219,7 @@ export default function ScoreChart({ history, predictions }: Props) {
             <span style={{ color: "var(--text-secondary)" }}>Historické skóre</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div style={{ width: "20px", height: "2px", background: "var(--prediction)", borderRadius: "1px", borderTop: "2px dashed var(--prediction)", background: "transparent" }} />
+            <div style={{ width: "20px", height: "2px", borderRadius: "1px", borderTop: "2px dashed var(--prediction)", background: "transparent" }} />
             <span style={{ color: "var(--text-secondary)" }}>Predikce (7 dní)</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -169,7 +246,7 @@ export default function ScoreChart({ history, predictions }: Props) {
             </defs>
 
             {/* Y-axis grid lines */}
-            {[-3, -2, -1, 0, 1, 2, 3].map((v) => (
+            {yTicks.map((v) => (
               <g key={v}>
                 <line
                   x1={PAD.left} y1={yScale(v)} x2={W - PAD.right} y2={yScale(v)}
@@ -182,7 +259,7 @@ export default function ScoreChart({ history, predictions }: Props) {
                   textAnchor="end" fill="var(--text-muted)" fontSize="10"
                   fontFamily="monospace"
                 >
-                  {v > 0 ? `+${v}` : v}
+                  {v > 0 ? `+${Number(v.toFixed(2))}` : Number(v.toFixed(2))}
                 </text>
               </g>
             ))}

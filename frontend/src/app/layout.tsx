@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EUR/USD Fundamental Analyzer",
-  description: "Real-time fundamentální scoring EUR/USD páru – úrokové sazby, inflace, COT, PMI a více.",
-  keywords: ["EUR/USD", "forex", "fundamentální analýza", "swing trading"],
+  title: "Clarus",
+  description: "Clarus – real-time fundamentální scoring EUR/USD páru. Úrokové sazby, inflace, COT, PMI a více.",
+  keywords: ["EUR/USD", "forex", "fundamentální analýza", "swing trading", "Clarus"],
 };
 
 export default function RootLayout({
@@ -46,9 +46,9 @@ export default function RootLayout({
                   background: "linear-gradient(135deg, #22d3a0, #0ea5e9)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "14px", fontWeight: "700", color: "#07070f",
-                }}>F</div>
+                }}>C</div>
                 <span style={{ fontWeight: "600", fontSize: "15px", color: "var(--text-primary)" }}>
-                  EUR/USD Analyzer
+                  Clarus
                 </span>
                 <span style={{
                   fontSize: "11px", fontWeight: "500",
