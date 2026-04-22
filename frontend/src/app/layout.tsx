@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import UpdatedAt from "@/components/UpdatedAt";
 
 export const metadata: Metadata = {
   title: "Clarus",
@@ -57,11 +58,11 @@ export default function RootLayout({
                 }}>BETA</span>
               </div>
 
-              {/* Right: pair + live dot */}
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              {/* Right: updated date + pair */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <div className="live-dot" />
-                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Live</span>
+                  <UpdatedAt />
                 </div>
                 <div style={{
                   fontFamily: "'JetBrains Mono', monospace",

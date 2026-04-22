@@ -37,46 +37,7 @@ export default async function DashboardPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Top status bar */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 16px",
-        background: "var(--bg-card)",
-        borderRadius: "8px",
-        border: "1px solid var(--border)",
-        fontSize: "12px",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div className={`live-dot ${error_msg ? "error_red" : ""}`} />
-            <span style={{ color: "var(--text-secondary)" }}>
-              Data načtena naživo ze severu
-            </span>
-          </div>
-          <span style={{ color: "var(--border-bright)" }}>|</span>
-          <span style={{ color: "var(--text-muted)" }}>
-             {today_score?.date ? `Aktualizováno k ${new Date(today_score.date).toLocaleDateString("cs-CZ")}` : "Žádná data z dneška"}
-          </span>
-        </div>
-        
-        {error_msg ? (
-           <div style={{
-            fontSize: "11px", color: "var(--bearish)", fontWeight: 600,
-            background: "var(--bearish-dim)", padding: "2px 8px", borderRadius: "4px",
-          }}>
-            🔌 Chybí spojení
-          </div>
-        ) : (
-          <div style={{
-            fontSize: "11px", color: "var(--bullish)", fontWeight: 600,
-            background: "var(--bullish-dim)", padding: "2px 8px", borderRadius: "4px",
-          }}>
-            ✔️ Live API (Supabase)
-          </div>
-        )}
-      </div>
-
-      {/* Chyba při pádu, abychom viděli proč to prázdní */}
+      {/* Chyba při pádu backendu */}
       {error_msg && (
         <div style={{ padding: "20px", background: "var(--bearish-dim)", color: "var(--bearish)", border: "1px solid var(--border)", borderRadius: "8px" }}>
           <strong>Chyba:</strong> {error_msg}
