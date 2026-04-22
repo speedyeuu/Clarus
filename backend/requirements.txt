@@ -18,7 +18,7 @@ scipy
 supabase==2.9.0
 
 # Technical analysis
-pandas-ta
+
 
 
 
