@@ -85,8 +85,15 @@ export default function ScoreChart({ history, predictions }: Props) {
     yTicks.sort((a, b) => a - b);
   }
 
-  // X scale
-  const xScale = (i: number, total: number) => PAD.left + (i / (total - 1)) * innerW;
+  // X scale — používáme reálné datumy, ne indexy, aby mezery v datech byly proporcionálně správné
+  const allDates = allPoints.map(p => new Date(p.date).getTime());
+  const minDate = Math.min(...allDates);
+  const maxDate = Math.max(...allDates);
+  const dateRange = maxDate - minDate || 1;
+  const xScale = (_i: number, _total: number, date?: string) => {
+    if (!date) return PAD.left + (_i / Math.max(1, _total - 1)) * innerW;
+    return PAD.left + ((new Date(date).getTime() - minDate) / dateRange) * innerW;
+  };
 
   // Build SVG paths
   const histLen = historyPoints.length;
@@ -94,27 +101,28 @@ export default function ScoreChart({ history, predictions }: Props) {
   const total = allPoints.length;
 
   const histPath = historyPoints.map((p, i) =>
-    `${i === 0 ? "M" : "L"} ${xScale(i, total)} ${yScale(p.value)}`
+    `${i === 0 ? "M" : "L"} ${xScale(i, total, p.date)} ${yScale(p.value)}`
   ).join(" ");
 
   const predPath = predictionPoints.map((p, i) =>
-    `${i === 0 ? "M" : "L"} ${xScale(histLen - 1 + i, total)} ${yScale(p.value)}`
+    `${i === 0 ? "M" : "L"} ${xScale(0, 0, p.date)} ${yScale(p.value)}`
   ).join(" ");
 
   // Prediction band area
   const bandTop = predictionPoints.map((p, i) =>
-    `${i === 0 ? "M" : "L"} ${xScale(histLen - 1 + i, total)} ${yScale(p.high ?? p.value + 0.5)}`
+    `${i === 0 ? "M" : "L"} ${xScale(0, 0, p.date)} ${yScale(p.high ?? p.value + 0.5)}`
   ).join(" ");
-  const bandBot = [...predictionPoints].reverse().map((p, i) =>
-    `${i === 0 ? "M" : "L"} ${xScale(histLen - 1 + (predLen - 1 - i), total)} ${yScale(p.low ?? p.value - 0.5)}`
+  const bandBot = [...predictionPoints].reverse().map((p) =>
+    `L ${xScale(0, 0, p.date)} ${yScale(p.low ?? p.value - 0.5)}`
   ).join(" ");
-  const bandPath = `${bandTop} ${bandBot} Z`;
+  const bandPath = `${bandTop} ${bandBot.replace("L", "M")} Z`;
 
   // Zero line y
   const zeroY = yScale(0);
 
   // Last point for glow dot
-  const lastHistX = xScale(histLen - 1, total);
+  const lastHistPoint = historyPoints[histLen - 1];
+  const lastHistX = lastHistPoint ? xScale(0, 0, lastHistPoint.date) : PAD.left;
   const lastHistY = yScale(todayScore);
 
   const changeColor = change24h > 0 ? "var(--bullish)" : change24h < 0 ? "var(--bearish)" : "var(--neutral)";
@@ -282,7 +290,7 @@ export default function ScoreChart({ history, predictions }: Props) {
             {/* History area fill */}
             {historyPoints.length > 1 && (
               <path
-                d={`${histPath} L ${xScale(histLen - 1, total)} ${H - PAD.bottom} L ${xScale(0, total)} ${H - PAD.bottom} Z`}
+                d={`${histPath} L ${xScale(0, 0, historyPoints[histLen-1].date)} ${H - PAD.bottom} L ${xScale(0, 0, historyPoints[0].date)} ${H - PAD.bottom} Z`}
                 fill="url(#histGrad)"
               />
             )}
@@ -324,22 +332,19 @@ export default function ScoreChart({ history, predictions }: Props) {
               />
             )}
 
-            {/* X-axis dates (every 7 days) */}
-            {allPoints.filter((_, i) => i % 7 === 0).map((p, i) => {
-              const origI = allPoints.indexOf(p);
-              return (
-                <text
-                  key={p.date}
-                  x={xScale(origI, total)}
-                  y={H - PAD.bottom + 16}
-                  textAnchor="middle"
-                  fill="var(--text-muted)"
-                  fontSize="9"
-                >
-                  {new Date(p.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}
-                </text>
-              );
-            })}
+            {/* X-axis dates — zobraz každých 7 dní dle reálného datumu */}
+            {allPoints.filter((_, i) => i % 7 === 0).map((p) => (
+              <text
+                key={p.date}
+                x={xScale(0, 0, p.date)}
+                y={H - PAD.bottom + 16}
+                textAnchor="middle"
+                fill="var(--text-muted)"
+                fontSize="9"
+              >
+                {new Date(p.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}
+              </text>
+            ))}
           </svg>
         </div>
       </div>

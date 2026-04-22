@@ -2,15 +2,16 @@
 
 import { useRef } from "react";
 import { DailyScore } from "@/lib/types";
+import InfoTooltip from "@/components/InfoTooltip";
 
 interface Props {
   title: string;
   history: DailyScore[];
   dataKey: keyof DailyScore;
-  description?: string;
+  tooltip?: string;
 }
 
-export default function IndicatorHistoryChart({ title, history, dataKey, description }: Props) {
+export default function IndicatorHistoryChart({ title, history, dataKey, tooltip }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Získáme všechny body (ignorujeme null a mapujeme na 0, i když by neměly být null)
@@ -51,12 +52,12 @@ export default function IndicatorHistoryChart({ title, history, dataKey, descrip
     <div className="card animate-slide-up" style={{ padding: "16px", flex: 1, minWidth: "250px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-            {title}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {title}
+            </div>
+            {tooltip && <InfoTooltip label={title} text={tooltip} />}
           </div>
-          {description && (
-            <div style={{ fontSize: "11px", color: "var(--text-secondary)", maxWidth: "200px", lineHeight: "1.3" }}>{description}</div>
-          )}
         </div>
         <div style={{
           fontSize: "14px", fontWeight: 600, fontFamily: "monospace", color: currentColor,

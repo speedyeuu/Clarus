@@ -60,13 +60,13 @@ export default async function DashboardPage() {
                 title="Retail Sentiment" 
                 dataKey="score_retail_sentiment"
                 history={history} 
-                description="Pozice drobných traderů na EUR/USD (z OANDA)"
+                tooltip="Kontraindikátor! Ukazuje pozice malých retailových obchodníků. Pokud 80 % retailu shortuje EUR/USD, velcí hráči jsou pravděpodobně na opačné straně → bullish signál. Dav se mýlí — sledujeme ho obráceně."
               />
               <IndicatorHistoryChart 
                 title="COT Bias" 
                 dataKey="score_cot"
                 history={history} 
-                description="Pozice velkých hráčů (Non-Commercial long/short ratio z CME)"
+                tooltip="Ukazuje, jak velcí institucionální hráči drží pozice na EUR a americkém dolaru. Silná net-long pozice na EUR = smart money čeká posílení EUR — jde o spolehlivý dlouhodobý sentiment indikátor."
               />
             </div>
 
