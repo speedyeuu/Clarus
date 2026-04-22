@@ -2,8 +2,8 @@ import ScoreOverview from "@/components/ScoreOverview";
 import ScoreChart from "@/components/ScoreChart";
 import EventsPanel from "@/components/EventsPanel";
 import IndicatorHistoryChart from "@/components/IndicatorHistoryChart";
-import { fetchLatestScore, fetchScoreHistory, fetchPredictions, fetchUpcomingEvents } from "@/lib/api";
-import type { DailyScore, Prediction, UpcomingEvent } from "@/lib/types";
+import { fetchLatestScore, fetchScoreHistory, fetchPredictions, fetchUpcomingEvents, fetchAccuracySummary } from "@/lib/api";
+import type { DailyScore, Prediction, UpcomingEvent, AccuracySummary } from "@/lib/types";
 
 // Next.js serverový komponent
 export default async function DashboardPage() {
@@ -14,21 +14,24 @@ export default async function DashboardPage() {
   let history: DailyScore[] = [];
   let predictions: Prediction[] = [];
   let events: UpcomingEvent[] = [];
+  let accuracy: AccuracySummary = { week_avg: null, month_avg: null, week_count: 0, month_count: 0 };
   
   let error_msg: string | null = null;
 
   try {
-    const [latestRes, historyRes, predRes, eventsRes] = await Promise.all([
+    const [latestRes, historyRes, predRes, eventsRes, accuracyRes] = await Promise.all([
       fetchLatestScore(),
       fetchScoreHistory(30),
       fetchPredictions(),
-      fetchUpcomingEvents(7)
+      fetchUpcomingEvents(7),
+      fetchAccuracySummary(),
     ]);
     
     today_score = latestRes;
     history = historyRes;
     predictions = predRes;
     events = eventsRes;
+    accuracy = accuracyRes;
     
   } catch (err: any) {
     console.error("Failed to fetch from backend API:", err);
@@ -52,7 +55,7 @@ export default async function DashboardPage() {
 
           {/* Right: Chart + Events */}
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 }}>
-            <ScoreChart history={history} predictions={predictions} />
+            <ScoreChart history={history} predictions={predictions} accuracy={accuracy} />
             
             {/* Vložené sekundární grafy pro Retail a COT */}
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", width: "100%" }}>

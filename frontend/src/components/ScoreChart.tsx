@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DailyScore, Prediction, getScoreColor } from "@/lib/types";
+import { DailyScore, Prediction, AccuracySummary, getScoreColor } from "@/lib/types";
 
 interface ChartPoint {
   date: string;
@@ -14,9 +14,10 @@ interface ChartPoint {
 interface Props {
   history: DailyScore[];
   predictions: Prediction[];
+  accuracy?: AccuracySummary;
 }
 
-export default function ScoreChart({ history, predictions }: Props) {
+export default function ScoreChart({ history, predictions, accuracy }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState<"1W" | "1M">("1M");
 
@@ -170,8 +171,34 @@ export default function ScoreChart({ history, predictions }: Props) {
           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             Score History
           </div>
-          <div style={{ fontSize: "13px", color: "var(--text-secondary)", display: "flex", gap: "12px", alignItems: "center" }}>
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "2px" }}>
             <span>Posledních 30 dní + 7 dní predikce</span>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ opacity: 0.7 }}>Přesnost predikcí:</span>
+              {accuracy && (accuracy.week_count >= 3 || accuracy.month_count >= 3) ? (
+                <>
+                  {accuracy.week_count >= 3 && (
+                    <span style={{
+                      color: accuracy.week_avg! >= 0.75 ? "var(--bullish)" : accuracy.week_avg! >= 0.5 ? "var(--text-secondary)" : "var(--bearish)",
+                      fontWeight: 600, fontFamily: "monospace",
+                    }}>
+                      7d {Math.round(accuracy.week_avg! * 100)}%
+                    </span>
+                  )}
+                  {accuracy.week_count >= 3 && accuracy.month_count >= 3 && <span style={{ opacity: 0.4 }}>|</span>}
+                  {accuracy.month_count >= 3 && (
+                    <span style={{
+                      color: accuracy.month_avg! >= 0.75 ? "var(--bullish)" : accuracy.month_avg! >= 0.5 ? "var(--text-secondary)" : "var(--bearish)",
+                      fontWeight: 600, fontFamily: "monospace",
+                    }}>
+                      30d {Math.round(accuracy.month_avg! * 100)}%
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span style={{ opacity: 0.5, fontStyle: "italic" }}>Nedostatek dat</span>
+              )}
+            </span>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import type { DailyScore, Prediction, UpcomingEvent, AutoresearchLog } from "./types";
+import type { DailyScore, Prediction, UpcomingEvent, AutoresearchLog, AccuracySummary } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -24,6 +24,14 @@ export async function fetchPredictions() {
 
 export async function fetchPredictionAccuracy(days = 30) {
   return apiGet<Record<string, number>>(`/api/predictions/accuracy?days=${days}`);
+}
+
+export async function fetchAccuracySummary(): Promise<AccuracySummary> {
+  try {
+    return await apiGet<AccuracySummary>("/api/predictions/accuracy-summary");
+  } catch {
+    return { week_avg: null, month_avg: null, week_count: 0, month_count: 0 };
+  }
 }
 
 export async function fetchUpcomingEvents(days = 7) {

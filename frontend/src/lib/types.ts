@@ -57,6 +57,13 @@ export interface AutoresearchLog {
   rejected: boolean;
 }
 
+export interface AccuracySummary {
+  week_avg: number | null;
+  month_avg: number | null;
+  week_count: number;
+  month_count: number;
+}
+
 // =============================================
 // INDIKÁTOR METADATA (label, pořadí)
 // =============================================
