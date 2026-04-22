@@ -119,31 +119,41 @@ export default function ScoreChart({ history, predictions }: Props) {
 
   const changeColor = change24h > 0 ? "var(--bullish)" : change24h < 0 ? "var(--bearish)" : "var(--neutral)";
 
-  const handleDownloadCsv = () => {
-    const pairName = history.length > 0 && history[0].pair ? history[0].pair : "EUR/USD";
-    
-    // Vytvoření CSV obsahu - Excel v CZ/EU potřebuje jako oddělovač středník (;)
-    let csvContent = `Clarus Trading Software - Export dat pro par: ${pairName}\n`;
-    csvContent += `Datum;Overall Score\n`;
-    
-    // Sloupce dat (oddělené středníkem)
-    history.forEach((d) => {
-      // Skóre exportujeme s desetinnou čárkou pro jistotu, aby v něm Excel viděl funkční čísla
-      const localizedScore = String(d.total_score).replace(".", ",");
-      csvContent += `${d.date};${localizedScore}\n`;
-    });
+  const handleDownloadXlsx = async () => {
+    const { utils, write } = await import("xlsx");
+    const pairName = history.length > 0 && history[0].pair ? history[0].pair : "EUR_USD";
 
-    // BOM (Byte Order Mark) hlavička řekne Excelu, že to je UTF-8 dokument a nepokazí diakritiku
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
+    // Připrav data jako pole objektů
+    const rows = [
+      ["Clarus Trading Software – Export dat pro pár: " + pairName],
+      [],
+      ["Datum", "Overall Score"],
+      ...history.map((d) => {
+        const [year, month, day] = d.date.split("-");
+        return [`${day}.${month}.${year}`, d.total_score];
+      }),
+    ];
+
+    const wb = utils.book_new();
+    const ws = utils.aoa_to_sheet(rows);
+
+    // Nastav šířky sloupců: Datum = 15 znaků, Score = 16 znaků
+    ws["!cols"] = [{ wch: 15 }, { wch: 16 }];
+
+    utils.book_append_sheet(wb, ws, pairName.replace("/", "_"));
+
+    const buf = write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `clarus_${pairName}_export.csv`);
+    link.setAttribute("download", `clarus_${pairName.replace("/", "_")}_export.xlsx`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="card animate-slide-up" style={{ animationDelay: "0.1s" }}>
@@ -192,8 +202,8 @@ export default function ScoreChart({ history, predictions }: Props) {
               </button>
             ))}
             <button
-              onClick={handleDownloadCsv}
-              title="Stáhnout za 1 měsíc (CSV)"
+              onClick={handleDownloadXlsx}
+              title="Stáhnout za 1 měsíc (XLSX)"
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 marginLeft: "8px", padding: "3px 10px",
@@ -205,7 +215,7 @@ export default function ScoreChart({ history, predictions }: Props) {
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              .CSV
+              .XLSX
             </button>
           </div>
         </div>

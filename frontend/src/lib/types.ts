@@ -60,18 +60,51 @@ export interface AutoresearchLog {
 // =============================================
 // INDIKÁTOR METADATA (label, pořadí)
 // =============================================
-export const INDICATOR_META: Record<string, { label: string; weight_key: string; order: number }> = {
-  score_interest_rates:   { label: "Interest Rates",   weight_key: "interest_rates",   order: 1 },
-  score_inflation:        { label: "Inflation",         weight_key: "inflation",         order: 2 },
-  score_gdp:              { label: "GDP",               weight_key: "gdp",               order: 3 },
-  score_labor:            { label: "Labor",             weight_key: "labor",             order: 4 },
-  score_cot:              { label: "COT Bias",          weight_key: "cot",               order: 5 },
-  score_spmi:             { label: "Services PMI",      weight_key: "spmi",              order: 6 },
-  score_mpmi:             { label: "Manuf. PMI",        weight_key: "mpmi",              order: 7 },
-  score_retail_sales:     { label: "Retail Sales",      weight_key: "retail_sales",      order: 8 },
-  score_trend:            { label: "Trend",             weight_key: "trend",             order: 9 },
-  score_retail_sentiment: { label: "Retail Sentiment",  weight_key: "retail_sentiment",  order: 10 },
-  score_seasonality:      { label: "Seasonality",       weight_key: "seasonality",       order: 11 },
+export const INDICATOR_META: Record<string, { label: string; weight_key: string; order: number; tooltip: string }> = {
+  score_interest_rates: {
+    label: "Interest Rates", weight_key: "interest_rates", order: 1,
+    tooltip: "Úrokové sazby ECB (EUR) a FEDu (USD). Vyšší sazby přitahují kapitál a posilují měnu. Pokud ECB zvyšuje agresivněji než FED, EUR/USD roste — a naopak. Klíčové jsou zasedání centrálních bank a jejich výhled (hawkish = býčí, dovish = medvědí).",
+  },
+  score_inflation: {
+    label: "Inflation", weight_key: "inflation", order: 2,
+    tooltip: "Inflace (CPI/HICP) určuje, jak moc centrální banka tlačí na sazby. Vysoká inflace v eurozóně → ECB zpřísňuje → EUR posiluje. Vysoká inflace v USA → FED zpřísňuje → EUR/USD klesá. Trh reaguje hlavně na překvapení oproti prognóze.",
+  },
+  score_gdp: {
+    label: "GDP", weight_key: "gdp", order: 3,
+    tooltip: "Hrubý domácí produkt měří celkový ekonomický výkon. Silný GDP eurozóny signalizuje zdravou ekonomiku a posiluje EUR vůči USD. Důležité je srovnání obou stran a míra překvapení — trh kupuje, co překvapí pozitivně.",
+  },
+  score_labor: {
+    label: "Labor", weight_key: "labor", order: 4,
+    tooltip: "Trh práce (nezaměstnanost, mzdy). Nízká nezaměstnanost a silné mzdy vytvářejí inflační tlak → centrální banka zvyšuje sazby. Silný americký trh práce tlačí USD nahoru a EUR/USD dolů — a naopak.",
+  },
+  score_cot: {
+    label: "COT Bias", weight_key: "cot", order: 5,
+    tooltip: "Ukazuje, jak velcí institucionální hráči drží pozice na EUR a americkém dolaru. Silná net-long pozice na EUR = smart money čeká posílení EUR — jde o spolehlivý dlouhodobý sentiment indikátor.",
+  },
+  score_spmi: {
+    label: "Services PMI", weight_key: "spmi", order: 6,
+    tooltip: "Index aktivity ve službách (průzkum mezi manažery firem). Hodnoty nad 50 = expanze, pod 50 = kontrakce. Sektor služeb tvoří většinu ekonomiky eurozóny — silné EU PMI vs. slabé USA PMI = bullish EUR/USD.",
+  },
+  score_mpmi: {
+    label: "Manuf. PMI", weight_key: "mpmi", order: 7,
+    tooltip: "Index aktivity ve výrobním sektoru. Stejná logika jako Services PMI, ale méně výrazný vliv. Klíčový pro Německo — slabé německé výrobní PMI bývá bearish pro celé EUR.",
+  },
+  score_retail_sales: {
+    label: "Retail Sales", weight_key: "retail_sales", order: 8,
+    tooltip: "Maloobchodní tržby měří spotřebitelské výdaje — klíčový ukazatel ekonomické síly. Silné tržby v eurozóně = silnější EUR. Trh reaguje především na překvapení vůči prognóze, samotná absolutní čísla jsou méně podstatná.",
+  },
+  score_trend: {
+    label: "Trend", weight_key: "trend", order: 9,
+    tooltip: "Technický makro-trend EUR/USD z denních svíček. Kombinuje EMA 20, EMA 50 a ADX — ukazuje sílu a směr trendu. Pozitivní trend potvrzuje fundamentální bullish signál, negativní varuje před vstupem.",
+  },
+  score_retail_sentiment: {
+    label: "Retail Sentiment", weight_key: "retail_sentiment", order: 10,
+    tooltip: "Kontraindikátor! Ukazuje pozice malých retailových obchodníků. Pokud 80 % retailu shortuje EUR/USD, velcí hráči jsou pravděpodobně na opačné straně → bullish signál. Dav se mýlí — sledujeme ho obráceně.",
+  },
+  score_seasonality: {
+    label: "Seasonality", weight_key: "seasonality", order: 11,
+    tooltip: "Historické sezónní vzory EUR/USD. Prosinec bývá silný pro EUR (end-of-year rally), březen naopak slabý. Jde o statistický průměr z historických dat — doplňkový kontext, ne zákonité pravidlo.",
+  },
 };
 
 // =============================================

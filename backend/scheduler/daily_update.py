@@ -241,11 +241,13 @@ async def run_daily_update(pair: str = "EURUSD"):
     
     # Vyfiltrujeme nadcházející události z celého FF týdne (všechny dny větší než dnešek)
     for ev in ff_week:
-        if ev.date > today_date:
+        # ev.date může být datetime nebo date objekt — převedeme na ISO string pro srovnání
+        ev_date_str = ev.date.date().isoformat() if hasattr(ev.date, "date") else str(ev.date)[:10]
+        if ev_date_str > today_date:
             poly_signal = extract_signal_from_polymarket(ev.title, poly_markets)
             
             upcoming_events_to_save.append({
-                "event_date": ev.date,
+                "event_date": ev_date_str,
                 "title": ev.title,
                 "country": ev.country,
                 "impact": ev.impact,
