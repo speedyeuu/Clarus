@@ -1,0 +1,237 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  /* Backgrounds */
+  --bg-primary:   #07070f;
+  --bg-card:      #0f0f1a;
+  --bg-elevated:  #161625;
+  --bg-hover:     #1c1c30;
+  --bg-border:    #1e1e35;
+
+  /* Accent colors */
+  --bullish:      #22d3a0;
+  --bullish-dim:  rgba(34, 211, 160, 0.12);
+  --bearish:      #f43f5e;
+  --bearish-dim:  rgba(244, 63, 94, 0.12);
+  --neutral:      #6b7280;
+  --neutral-dim:  rgba(107, 114, 128, 0.12);
+  --prediction:   #f59e0b;
+  --prediction-dim: rgba(245, 158, 11, 0.12);
+
+  /* Mild variants */
+  --mild-bullish: #4ade80;
+  --mild-bearish: #fb923c;
+
+  /* Text */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #4b5563;
+
+  /* Borders */
+  --border:         #1e293b;
+  --border-bright:  #334155;
+
+  /* Glow effects */
+  --glow-bullish:  0 0 24px rgba(34, 211, 160, 0.20);
+  --glow-bearish:  0 0 24px rgba(244, 63, 94, 0.20);
+  --glow-gold:     0 0 24px rgba(245, 158, 11, 0.20);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =============================================
+   TYPOGRAPHY
+   ============================================= */
+.mono {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+/* =============================================
+   SCROLLBAR
+   ============================================= */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-card); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* =============================================
+   CARD
+   ============================================= */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--border-bright);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* =============================================
+   SCORE BADGE
+   ============================================= */
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.score-badge.bullish    { background: var(--bullish-dim);    color: var(--bullish); }
+.score-badge.bearish    { background: var(--bearish-dim);    color: var(--bearish); }
+.score-badge.neutral    { background: var(--neutral-dim);    color: var(--neutral); }
+.score-badge.prediction { background: var(--prediction-dim); color: var(--prediction); }
+
+/* =============================================
+   SCORE BAR (progress -3 → +3)
+   ============================================= */
+.score-bar-track {
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  position: relative;
+  overflow: visible;
+}
+
+.score-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Center marker */
+.score-bar-track::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 1px;
+  height: 8px;
+  background: var(--border-bright);
+  transform: translateX(-50%);
+}
+
+/* =============================================
+   IMPACT DOT (FF event impact)
+   ============================================= */
+.impact-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.impact-dot.high   { background: var(--bearish); box-shadow: 0 0 6px var(--bearish); }
+.impact-dot.medium { background: var(--prediction); }
+.impact-dot.low    { background: var(--neutral); }
+
+/* =============================================
+   ANIMATED ELEMENTS
+   ============================================= */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-slide-up { animation: slide-up 0.4s ease forwards; }
+.animate-fade-in  { animation: fade-in 0.3s ease forwards; }
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bullish);
+  animation: pulse-glow 2s infinite;
+}
+
+/* =============================================
+   GRID LAYOUT
+   ============================================= */
+.dashboard-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 380px 1fr;
+  }
+}
+
+@media (min-width: 1400px) {
+  .dashboard-grid {
+    grid-template-columns: 420px 1fr;
+  }
+}
+
+/* =============================================
+   HOVER STATES
+   ============================================= */
+.indicator-row:hover {
+  background: var(--bg-elevated);
+  margin: 0 -20px;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+
+.event-row:hover {
+  background: var(--bg-elevated);
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
