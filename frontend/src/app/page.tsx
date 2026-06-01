@@ -25,8 +25,9 @@ export default async function DashboardPage() {
   let weekSummary = null;
   let error_msg: string | null = null;
 
-  try {
-    const [latestRes, historyRes, predRes, eventsRes, accuracyRes, techRes, weekRes] = await Promise.all([
+  // Každý endpoint má vlastní fallback — selhání jednoho neovlivní ostatní panely
+  const [latestRes, historyRes, predRes, eventsRes, accuracyRes, techRes, weekRes] =
+    await Promise.allSettled([
       fetchLatestScore(),
       fetchScoreHistory(30),
       fetchPredictions(),
@@ -35,17 +36,18 @@ export default async function DashboardPage() {
       fetchTechnicalAnalysis(),
       fetchWeekSummary(),
     ]);
-    today_score = latestRes;
-    history = historyRes;
-    predictions = predRes;
-    events = eventsRes;
-    accuracy = accuracyRes;
-    technical = techRes;
-    weekSummary = weekRes;
-  } catch (err: any) {
-    console.error("Failed to fetch from backend API:", err);
-    error_msg = "Máme potíže s připojením k našemu Python serveru. Běží na backendu `uvicorn main:app`?";
-  }
+
+  if (latestRes.status === "fulfilled") today_score = latestRes.value;
+  else { console.error("score/latest failed:", latestRes.reason); error_msg = "Nelze načíst skóre — běží backend?"; }
+
+  if (historyRes.status === "fulfilled") history = historyRes.value;
+  if (predRes.status === "fulfilled") predictions = predRes.value;
+  if (eventsRes.status === "fulfilled") events = eventsRes.value;
+  if (accuracyRes.status === "fulfilled") accuracy = accuracyRes.value;
+  if (techRes.status === "fulfilled") technical = techRes.value;
+  else console.error("score/technical failed:", (techRes as PromiseRejectedResult).reason);
+  if (weekRes.status === "fulfilled") weekSummary = weekRes.value;
+  else console.error("predictions/week-summary failed:", (weekRes as PromiseRejectedResult).reason);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
