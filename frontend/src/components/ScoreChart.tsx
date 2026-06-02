@@ -57,8 +57,8 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
 
   // SVG chart dimensions
   const W = 800;
-  const H = 280; // Zvětšeno pro větší vertikální prostor
-  const PAD = { top: 20, right: 20, bottom: 30, left: 40 };
+  const H = range === "1M" ? 310 : 280;
+  const PAD = { top: 20, right: 20, bottom: range === "1M" ? 55 : 30, left: 40 };
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
@@ -345,32 +345,40 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
               />
             )}
 
-            {/* X-axis grid lines (vertikální mřížka) */}
-            {allPoints.filter((_, i) => i % 7 === 0).map((p) => (
+            {/* X-axis vertical grid lines — každý den */}
+            {allPoints.map((p) => (
               <line
                 key={`grid-v-${p.date}`}
                 x1={xScale(0, 0, p.date)} y1={PAD.top}
                 x2={xScale(0, 0, p.date)} y2={H - PAD.bottom}
-                stroke="var(--border)"
+                stroke={p.isPrediction ? "rgba(244,63,94,0.15)" : "var(--border)"}
                 strokeWidth="0.5"
-                strokeDasharray="3,4"
-                opacity="0.35"
+                strokeDasharray="2,4"
+                opacity="0.5"
               />
             ))}
 
-            {/* X-axis dates — zobraz každých 7 dní dle reálného datumu */}
-            {allPoints.filter((_, i) => i % 7 === 0).map((p) => (
-              <text
-                key={p.date}
-                x={xScale(0, 0, p.date)}
-                y={H - PAD.bottom + 16}
-                textAnchor="middle"
-                fill="var(--text-muted)"
-                fontSize="9"
-              >
-                {new Date(p.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}
-              </text>
-            ))}
+            {/* X-axis dates — každý den, popisky pootočené pro 1M view */}
+            {allPoints.map((p, i) => {
+              const x = xScale(0, 0, p.date);
+              const label = new Date(p.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+              // V 1M view pootočíme o -45° aby se nepřekrývaly
+              const rotate = range === "1M" ? `rotate(-45, ${x}, ${H - PAD.bottom + 10})` : "";
+              const yOffset = range === "1M" ? H - PAD.bottom + 14 : H - PAD.bottom + 16;
+              return (
+                <text
+                  key={p.date}
+                  x={x}
+                  y={yOffset}
+                  textAnchor={range === "1M" ? "end" : "middle"}
+                  fill={p.isPrediction ? "rgba(244,63,94,0.6)" : "var(--text-muted)"}
+                  fontSize={range === "1M" ? "7.5" : "9"}
+                  transform={rotate}
+                >
+                  {label}
+                </text>
+              );
+            })}
           </svg>
         </div>
       </div>
