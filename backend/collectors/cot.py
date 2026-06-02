@@ -5,10 +5,10 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 class COTData(BaseModel):
-    eur_net_position: int
-    dxy_net_position: int
-    eur_history_52w: List[int]
-    dxy_history_52w: List[int]
+    base_net_position: int
+    quote_net_position: int
+    base_history_52w: List[int]
+    quote_history_52w: List[int]
 
 # CFTC SODA API (Socrata) - Public Government Open Data, no API Key needed!
 CFTC_URL = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
@@ -45,26 +45,38 @@ async def fetch_cftc_symbol_data(market_name: str, weeks: int = 52) -> List[int]
         logger.error(f"Chyba při stahování vládních dat CFTC pro {market_name}: {e}")
         return []
 
-async def fetch_cot_data() -> Optional[COTData]:
+async def fetch_cot_data(pair: str = "EURUSD") -> Optional[COTData]:
     """
-    Stáhne páteční COT (Commitment of Traders) report pro Euro i Dolar najednou.
+    Stáhne páteční COT (Commitment of Traders) report pro danou měnu a Dolar najednou.
     Vrací dnešní pozici a 52-týdenní historii ke zkalibrovaní extrémů.
     """
-    logger.info("Stahuji čerstvý COT report z vládních serverů CFTC.gov...")
+    logger.info(f"Stahuji čerstvý COT report z vládních serverů CFTC.gov pro {pair}...")
     
-    # "EURO FX - CHICAGO MERCANTILE EXCHANGE"
-    # "USD INDEX - ICE FUTURES U.S." (Změněno v 2022 z U.S. DOLLAR INDEX)
+    CFTC_MAP = {
+        "EUR": "EURO FX - CHICAGO MERCANTILE EXCHANGE",
+        "GBP": "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE",
+        "JPY": "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE",
+        "AUD": "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+        "NZD": "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+        "USD": "USD INDEX - ICE FUTURES U.S."
+    }
+
+    base = pair[:3]
+    quote = pair[3:]
+
+    base_cftc_name = CFTC_MAP.get(base, CFTC_MAP["EUR"])
+    quote_cftc_name = CFTC_MAP.get(quote, CFTC_MAP["USD"])
     
-    eur_history = await fetch_cftc_symbol_data("EURO FX - CHICAGO MERCANTILE EXCHANGE", 52)
-    dxy_history = await fetch_cftc_symbol_data("USD INDEX - ICE FUTURES U.S.", 52)
+    base_history = await fetch_cftc_symbol_data(base_cftc_name, 52)
+    quote_history = await fetch_cftc_symbol_data(quote_cftc_name, 52)
     
-    if not eur_history or not dxy_history:
+    if not base_history or not quote_history:
         logger.warning("CFTC vrátil prázdná data. Páteční COT report zřejmě ještě nevyšel nebo probíhá oprava serverů.")
         return None
         
     return COTData(
-        eur_net_position=eur_history[0],  # Ten nultý element je nejčerstvější dnešní!
-        dxy_net_position=dxy_history[0],
-        eur_history_52w=eur_history,      # Celé pole historie (pro výpočet 80/20 percentilu extrémů)
-        dxy_history_52w=dxy_history
+        base_net_position=base_history[0],
+        quote_net_position=quote_history[0],
+        base_history_52w=base_history,
+        quote_history_52w=quote_history
     )

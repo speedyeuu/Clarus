@@ -7,7 +7,8 @@ const PAIRS = [
   { id: "EURUSD", label: "EUR/USD", flag: "🇪🇺" },
   { id: "GBPUSD", label: "GBP/USD", flag: "🇬🇧" },
   { id: "USDJPY", label: "USD/JPY", flag: "🇯🇵" },
-  { id: "AUDUSD", label: "AUD/USD", flag: "🇦🇺" },
+  { id: "EURNZD", label: "EUR/NZD", flag: "🇳🇿" },
+  { id: "EURJPY", label: "EUR/JPY", flag: "🇯🇵" },
 ];
 
 interface Props {

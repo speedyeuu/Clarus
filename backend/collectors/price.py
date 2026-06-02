@@ -4,30 +4,30 @@ import pandas as pd
 from typing import Optional
 from config import get_settings
 
-async def fetch_historical_ohlc(days: int = 60) -> Optional[pd.DataFrame]:
+async def fetch_historical_ohlc(days: int = 60, pair: str = "EURUSD") -> Optional[pd.DataFrame]:
     """
-    Stáhne denní (Daily) OHLC data pro EUR/USD.
+    Stáhne denní (Daily) OHLC data pro zadaný pár (např. EURUSD).
 
     Pořadí zdrojů (podle kvality dat):
       1. EODHD       — nejpřesnější, aktuální data do dnes, daily limit vysoký
       2. Alpha Vantage — free tier má 3denní zpoždění a 25 req/den limit
       3. OANDA       — záložní, pokud oba výše selžou
     """
-    df = await _fetch_from_eodhd(days)
+    df = await _fetch_from_eodhd(days, pair)
     if df is not None:
         return df
-    df = await _fetch_from_alpha_vantage(days)
+    df = await _fetch_from_alpha_vantage(days, pair)
     if df is not None:
         return df
-    return await _fetch_from_oanda(days)
+    return await _fetch_from_oanda(days, pair)
 
-async def _fetch_from_eodhd(days: int) -> Optional[pd.DataFrame]:
+async def _fetch_from_eodhd(days: int, pair: str) -> Optional[pd.DataFrame]:
     settings = get_settings()
     if not settings.eodhd_api_key or settings.eodhd_api_key == "your-eodhd-key":
         logger.error("EODHD API klíč není nastaven!")
         return None
 
-    url = f"https://eodhd.com/api/eod/EURUSD.FOREX?api_token={settings.eodhd_api_key}&fmt=json&limit={days}&period=d"
+    url = f"https://eodhd.com/api/eod/{pair}.FOREX?api_token={settings.eodhd_api_key}&fmt=json&limit={days}&period=d"
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -59,14 +59,15 @@ async def _fetch_from_eodhd(days: int) -> Optional[pd.DataFrame]:
         logger.error(f"Error fetching price from EODHD: {e}")
         return None
 
-async def _fetch_from_oanda(days: int) -> Optional[pd.DataFrame]:
+async def _fetch_from_oanda(days: int, pair: str) -> Optional[pd.DataFrame]:
     settings = get_settings()
     if not settings.oanda_api_token or settings.oanda_api_token == "your-oanda-token":
         logger.error("OANDA API token není nastaven!")
         return None
 
-    # M = Midpoint (mid price)
-    url = f"https://api-fxtrade.oanda.com/v3/instruments/EUR_USD/candles?count={days}&price=M&granularity=D"
+    # OANDA formát: EUR_USD
+    oanda_instrument = f"{pair[:3]}_{pair[3:]}"
+    url = f"https://api-fxtrade.oanda.com/v3/instruments/{oanda_instrument}/candles?count={days}&price=M&granularity=D"
     headers = {
         "Authorization": f"Bearer {settings.oanda_api_token}",
         "Accept-Datetime-Format": "RFC3339"
@@ -106,13 +107,15 @@ async def _fetch_from_oanda(days: int) -> Optional[pd.DataFrame]:
         logger.error(f"Error fetching price from OANDA: {e}")
         return None
 
-async def _fetch_from_alpha_vantage(days: int) -> Optional[pd.DataFrame]:
+async def _fetch_from_alpha_vantage(days: int, pair: str) -> Optional[pd.DataFrame]:
     settings = get_settings()
     if not settings.alpha_vantage_key or settings.alpha_vantage_key == "your-alpha-vantage-key":
         logger.error("Alpha Vantage API klíč není nastaven!")
         return None
 
-    url = f"https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=EUR&to_symbol=USD&apikey={settings.alpha_vantage_key}"
+    from_sym = pair[:3]
+    to_sym = pair[3:]
+    url = f"https://www.alphavantage.co/query?function=FX_DAILY&from_symbol={from_sym}&to_symbol={to_sym}&apikey={settings.alpha_vantage_key}"
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

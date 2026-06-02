@@ -14,6 +14,8 @@ import httpx
 from loguru import logger
 from typing import Optional, Dict, Tuple
 from datetime import date, timedelta
+import pandas as pd
+from config import get_settings
 
 
 async def _fetch_fred_history(series_id: str, lookback_days: int = 90) -> Dict[str, float]:
@@ -85,62 +87,113 @@ async def _fetch_de2y_ecb_fallback() -> Optional[float]:
     return None
 
 
+async def _fetch_uk2y_eodhd(lookback_days: int = 90) -> Dict[str, float]:
+    """
+    Stáhne historii UK 2Y Gilts z EODHD (ticker GB2Y.GBOV).
+    Vrací dict {YYYY-MM-DD: float_hodnota}.
+    """
+    settings = get_settings()
+    if not settings.eodhd_api_key or settings.eodhd_api_key == "your-eodhd-key":
+        logger.error("EODHD API klíč není nastaven pro bond_yields!")
+        return {}
+
+    url = f"https://eodhd.com/api/eod/GB2Y.GBOV?api_token={settings.eodhd_api_key}&fmt=json&limit={lookback_days}&period=d"
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not isinstance(data, list) or not data:
+                logger.error("EODHD nevrátil platná data pro UK 2Y Gilts.")
+                return {}
+                
+            result = {}
+            for item in data:
+                date_str = item.get("date")
+                val_str = item.get("close")
+                if date_str and val_str is not None:
+                    result[date_str] = float(val_str)
+                    
+            logger.info(f"EODHD UK 2Y: staženo {len(result)} záznamů")
+            return result
+    except Exception as e:
+        logger.warning(f"Error fetching UK 2Y from EODHD: {e}")
+        return {}
+
+
 async def fetch_2y_yield_histories(
     lookback_days: int = 90,
+    pair: str = "EURUSD",
 ) -> Optional[Tuple[Dict[str, float], Dict[str, float]]]:
     """
-    Stáhne historii US 2Y a DE 2Y výnosů za posledních N dní.
+    Stáhne historii US 2Y a 2Y výnosů pro Base měnu za posledních N dní.
 
-    Vrací (us_2y_dict, de_2y_dict) kde klíče jsou 'YYYY-MM-DD' a hodnoty jsou procenta.
-    Vrací None pokud data nejsou dostupná nebo je příliš málo společných dní.
-
-    Příklady hodnot:
-      us_2y = {'2026-05-28': 3.990, '2026-05-27': 4.000, ...}
-      de_2y = {'2026-05-28': 1.820, '2026-05-27': 1.810, ...}
+    Vrací (us_2y_dict, base_2y_dict) kde klíče jsou 'YYYY-MM-DD' a hodnoty jsou procenta.
     """
-    logger.info("Stahuji US 2Y a DE 2Y výnosy z FRED...")
+    logger.info(f"Stahuji US 2Y a Base 2Y výnosy pro {pair}...")
 
-    # --- US 2Y (primární zdroj: FRED DGS2) ---
+    if pair == "EURNZD":
+        logger.warning(f"Denní NZD dluhopisy nejsou přes FRED k dispozici. Použije se automaticky fallback na úrokové sazby centrálních bank.")
+        return None
+
+    # --- Quote 2Y (US 2Y pro hlavní páry, primární zdroj: FRED DGS2) ---
     us_hist = await _fetch_fred_history("DGS2", lookback_days)
     if not us_hist:
         logger.error("US 2Y výnosy nedostupné — bond spread scoring přeskočen.")
         return None
 
-    # --- DE 2Y (primární zdroj: FRED IRDE2YD156N) ---
-    de_hist = await _fetch_fred_history("IRDE2YD156N", lookback_days)
+    # --- Base 2Y ---
+    base_hist = {}
+    
+    if pair == "EURUSD":
+        # DE 2Y (primární zdroj: FRED IRDE2YD156N)
+        base_hist = await _fetch_fred_history("IRDE2YD156N", lookback_days)
 
-    # --- DE 2Y fallback: ECB SDMX ---
-    if not de_hist:
-        logger.warning("DE 2Y z FRED nedostupné, zkouším ECB SDMX fallback...")
-        de_val = await _fetch_de2y_ecb_fallback()
-        if de_val is not None:
-            # Naplníme de_hist hodnotou pro všechna US data
-            # Spread bude mít fixní DE složku, ale Z-score US 2Y stále přidá hodnotu
-            de_hist = {d: de_val for d in us_hist.keys()}
-            logger.info(
-                f"DE 2Y ECB fallback: {de_val:.3f}% aplikováno na {len(de_hist)} dní US historie"
-            )
-        else:
-            logger.error("DE 2Y výnosy nedostupné ani z ECB — bond spread scoring přeskočen.")
+        # DE 2Y fallback: ECB SDMX
+        if not base_hist:
+            logger.warning("DE 2Y z FRED nedostupné, zkouším ECB SDMX fallback...")
+            de_val = await _fetch_de2y_ecb_fallback()
+            if de_val is not None:
+                base_hist = {d: de_val for d in us_hist.keys()}
+                logger.info(f"DE 2Y ECB fallback: {de_val:.3f}% aplikováno na {len(base_hist)} dní US historie")
+            else:
+                logger.error("DE 2Y výnosy nedostupné ani z ECB — bond spread scoring přeskočen.")
+                return None
+    elif pair == "GBPUSD":
+        base_hist = await _fetch_uk2y_eodhd(lookback_days)
+        if not base_hist:
+            logger.error("UK 2Y výnosy nedostupné z EODHD — bond spread scoring přeskočen.")
             return None
+    elif pair == "USDJPY":
+        # Japan 10Y as proxy since 2Y isn't cleanly available for free in FRED
+        # 10Y is heavily targeted by BOJ Yield Curve Control (YCC) so it's a valid macro proxy
+        base_hist = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
+        if not base_hist:
+            logger.error("Japonské výnosy z FRED nedostupné — bond spread scoring přeskočen.")
+            return None
+    else:
+        logger.warning(f"Pro pár {pair} nejsou bond yields naimplementované. Používám empty spread.")
+        return None
 
 
     # Zkontrolujeme dostatek překrývajících se dní pro Z-score
-    common = set(us_hist.keys()) & set(de_hist.keys())
+    common = set(us_hist.keys()) & set(base_hist.keys())
     if len(common) < 5:
         logger.warning(
-            f"Příliš málo společných dní pro US/DE 2Y ({len(common)}) — "
+            f"Příliš málo společných dní pro bond yields ({len(common)}) — "
             f"Z-score normalizace nebude přesná."
         )
 
     current_us = us_hist.get(max(us_hist.keys()))
-    current_de = de_hist.get(max(de_hist.keys()))
-    spread = current_us - current_de if current_us and current_de else None
+    current_base = base_hist.get(max(base_hist.keys()))
+    spread = current_us - current_base if current_us and current_base else None
 
     if spread is not None:
         logger.info(
-            f"Bond yields: US 2Y={current_us:.3f}%, DE 2Y={current_de:.3f}%, "
+            f"Bond yields: US 2Y={current_us:.3f}%, Base 2Y={current_base:.3f}%, "
             f"spread={spread:.3f}% (n_common={len(common)})"
         )
 
-    return us_hist, de_hist
+    return us_hist, base_hist

@@ -150,13 +150,13 @@ async def run_daily_update(pair: str = "EURUSD"):
     # KROK 1: KONTINUÁLNÍ INDIKÁTORY
     # ---------------------------------------------------------
     
-    # 1A. Sezónnost (záleží jen na aktuálním měsíci)
-    scores["seasonality"] = score_seasonality()
+    # 1A. Sezónnost (záleží jen na aktuálním měsíci a měnovém páru)
+    scores["seasonality"] = score_seasonality(pair=pair)
     indicator_ages["seasonality"] = 0  # konstantní — vždy dnešní
     logger.info(f"Seasonality score: {scores['seasonality']}")
 
-    # 1B. Trend (Cenový akce z OANDA / Alpha Vantage) + VIX Risk Sentiment
-    df_ohlc = await fetch_historical_ohlc(days=60)
+    # 1B. Trend (Cenový akce z OANDA / Alpha Vantage / EODHD) + VIX Risk Sentiment
+    df_ohlc = await fetch_historical_ohlc(days=60, pair=pair)
     tech_trend_score = score_trend(df_ohlc) if df_ohlc is not None else 0.0
 
     # VIX Risk Sentiment: vysoký VIX = tržní strach = USD safe haven = bearish EUR/USD
@@ -174,8 +174,8 @@ async def run_daily_update(pair: str = "EURUSD"):
         logger.info(f"Trend score (VIX nedostupný, jen EMA/ADX): {scores['trend']:.4f}")
     indicator_ages["trend"] = 0  # denní výpočet z cen = vždy čerstvý
     
-    # 1C. Retail Sentiment (OANDA)
-    sentiment_data = await fetch_retail_sentiment()
+    # 1C. Retail Sentiment (MyFXBook)
+    sentiment_data = await fetch_retail_sentiment(pair=pair)
     if sentiment_data:
         scores["retail_sentiment"] = score_sentiment(sentiment_data.long_pct, sentiment_data.short_pct)
         indicator_ages["retail_sentiment"] = 0  # denní data z OANDA = vždy čerstvá
@@ -184,13 +184,14 @@ async def run_daily_update(pair: str = "EURUSD"):
     # ---------------------------------------------------------
     # KROK 2: TÝDENNÍ / PRAVIDELNÁ DATA (COT z Nasdaqu)
     # ---------------------------------------------------------
-    cot_data = await fetch_cot_data()
+    cot_data = await fetch_cot_data(pair=pair)
     if cot_data:
         scores["cot"] = score_cot_combined(
-            eur_net=cot_data.eur_net_position,
-            dxy_net=cot_data.dxy_net_position,
-            eur_lookback=cot_data.eur_history_52w,
-            dxy_lookback=cot_data.dxy_history_52w
+            base_net=cot_data.base_net_position,
+            quote_net=cot_data.quote_net_position,
+            base_lookback=cot_data.base_history_52w,
+            quote_lookback=cot_data.quote_history_52w,
+            pair=pair
         )
         indicator_ages["cot"] = 0  # čerstvě stažená COT data
     logger.info(f"COT score: {scores.get('cot', 0.0)}")
@@ -200,7 +201,7 @@ async def run_daily_update(pair: str = "EURUSD"):
     # KROK 3: FOREX FACTORY KALENDÁŘ (Dnešní Surprise události)
     # ---------------------------------------------------------
     # Stáhneme celý týden a vyfiltrujeme jen dnešek
-    ff_week = await fetch_forex_factory_week()
+    ff_week = await fetch_forex_factory_week(pair=pair)
     ff_today = await filter_today_events(ff_week)
     
     # Pamatujeme si raw surprise data, která potom uložíme do indicator_readings
@@ -208,31 +209,53 @@ async def run_daily_update(pair: str = "EURUSD"):
     fresh_scores_today = {}
     
     # Načteme poslední úrokové sazby z databáze jako baseline
+    RATE_KEYS = {
+        "EUR": "ecb_rate",
+        "GBP": "boe_rate",
+        "JPY": "boj_rate",
+        "USD": "fed_rate",
+        "AUD": "rba_rate",
+        "NZD": "rbnz_rate"
+    }
+    base_rate_key = RATE_KEYS.get(pair[:3], "ecb_rate")
+    quote_rate_key = RATE_KEYS.get(pair[3:], "fed_rate")
+
     try:
-        res_fed = db.table("indicator_readings").select("actual").eq("indicator_name", "fed_rate").eq("pair", pair).order("date", desc=True).limit(1).execute()
-        res_ecb = db.table("indicator_readings").select("actual").eq("indicator_name", "ecb_rate").eq("pair", pair).order("date", desc=True).limit(1).execute()
-        latest_fed = res_fed.data[0]["actual"] if res_fed.data else 5.25
-        latest_ecb = res_ecb.data[0]["actual"] if res_ecb.data else 4.25
+        res_quote = db.table("indicator_readings").select("actual").eq("indicator_name", quote_rate_key).eq("pair", pair).order("date", desc=True).limit(1).execute()
+        res_base = db.table("indicator_readings").select("actual").eq("indicator_name", base_rate_key).eq("pair", pair).order("date", desc=True).limit(1).execute()
+        latest_quote = res_quote.data[0]["actual"] if res_quote.data else 5.25
+        latest_base = res_base.data[0]["actual"] if res_base.data else 4.25
     except Exception as e:
         logger.warning(f"Nepodařilo se načíst baseline úrokové sazby z DB: {e}")
-        latest_fed = 5.25
-        latest_ecb = 4.25
+        latest_quote = 5.25
+        latest_base = 4.25
 
     SPECIFIC_TO_GENERIC = {
         "cpi_us":           "inflation",
         "cpi_eu":           "inflation",
+        "cpi_uk":           "inflation",
         "pce_us":           "inflation",
+        "pce_eu":           "inflation",
+        "pce_uk":           "inflation",
         "nfp_us":           "labor",
+        "nfp_eu":           "labor",
+        "nfp_uk":           "labor",
         "unemployment_us":  "labor",
+        "unemployment_eu":  "labor",
+        "unemployment_uk":  "labor",
         "gdp_flash_us":     "gdp",
         "gdp_flash_eu":     "gdp",
+        "gdp_flash_uk":     "gdp",
         "mpmi_us":          "mpmi",
         "mpmi_eu":          "mpmi",
+        "mpmi_uk":          "mpmi",
         "spmi_us":          "spmi",
         "spmi_eu":          "spmi",
+        "spmi_uk":          "spmi",
         "retail_sales_us":  "retail_sales",
         "retail_sales_eu":  "retail_sales",
-        # Bug #4 fix: rate decisions musí aktualizovat interest_rates score
+        "retail_sales_uk":  "retail_sales",
+        # Rate decisions musí aktualizovat interest_rates score
         "fed_rate":         "interest_rates",
         "ecb_rate":         "interest_rates",
         "boe_rate":         "interest_rates",
@@ -246,19 +269,26 @@ async def run_daily_update(pair: str = "EURUSD"):
             
         stats = await get_normalization_stats(ev.indicator_key)
         
-        # Některá makro data mají inverzní charakter (Vysoká Inflace v USD/Unemployment v USD -> medvědí dopad pro EUR/USD)
+        # Dynamická detekce, zda událost pochází od Base nebo Quote měny
+        base_currency = pair[:3]
+        quote_currency = pair[3:]
+        
         invert = False
-        if ev.country == "USD":
-            # Dobré zprávy pro USD = Špatné pro EUR/USD (=> Invert)
-            invert = True
-            # Výjimka: Nezaměstnanost v USD (vyšší je BAD pro Dolar -> BULLISH pro EUR)
-            if "unemployment" in ev.indicator_key.lower():
-                invert = False
-        elif ev.country == "EUR":
-            # Dobré zprávy pro EUR = Dobré pro EUR/USD
+        if ev.country == base_currency:
+            # Dobré zprávy pro Base měnu = Pár roste (Bullish) → Invert=False
             invert = False
+            # Výjimka: Nezaměstnanost (vyšší je BAD pro měnu -> BEARISH pro pár)
             if "unemployment" in ev.indicator_key.lower():
                 invert = True
+        elif ev.country == quote_currency:
+            # Dobré zprávy pro Quote měnu = Pár klesá (Bearish) → Invert=True
+            invert = True
+            # Výjimka: Nezaměstnanost (vyšší je BAD pro Quote měnu -> BULLISH pro pár)
+            if "unemployment" in ev.indicator_key.lower():
+                invert = False
+        else:
+            # Fallback pro třetí země
+            invert = False
                 
         # Získání normalizovaného skóre (už bez zaokrouhlování na celé číslo)
         event_score = score_ff_event(ev.actual, ev.forecast, stats, invert=invert)
@@ -274,10 +304,10 @@ async def run_daily_update(pair: str = "EURUSD"):
         )
 
         # Pokud se jedná o změnu úrokové sazby, zachytíme její novou úroveň
-        if ev.indicator_key == "fed_rate" and actual_float is not None:
-            latest_fed = actual_float
-        elif ev.indicator_key == "ecb_rate" and actual_float is not None:
-            latest_ecb = actual_float
+        if ev.indicator_key == quote_rate_key and actual_float is not None:
+            latest_quote = actual_float
+        elif ev.indicator_key == base_rate_key and actual_float is not None:
+            latest_base = actual_float
 
         ff_readings_to_save.append({
             "date": today_date,
@@ -311,27 +341,36 @@ async def run_daily_update(pair: str = "EURUSD"):
     from collectors.bond_yields import fetch_2y_yield_histories
     from scoring.indicators import score_combined_interest_rates
 
-    bond_histories = await fetch_2y_yield_histories(lookback_days=90)
+    bond_histories = await fetch_2y_yield_histories(lookback_days=90, pair=pair)
 
     if bond_histories:
         us_hist, de_hist = bond_histories
         combined_ir, bond_score, policy_score, ir_log = score_combined_interest_rates(
-            us_hist, de_hist, latest_fed, latest_ecb
+            quote_2y_history=us_hist, 
+            base_2y_history=de_hist, 
+            quote_rate=latest_quote, 
+            base_rate=latest_base,
+            pair=pair
         )
         scores["interest_rates"] = combined_ir
         indicator_ages["interest_rates"] = 0  # denní bond spread = vždy čerstvý
         logger.info(f"Interest Rates (kombinovane): {ir_log}")
     else:
         # Fallback: pouze policy rate differential (původní chování)
-        diff = latest_fed - latest_ecb
-        scores["interest_rates"] = float(max(-10.0, min(10.0, diff * -2.0)))
+        # diff je kladný, pokud Base platí víc než Quote -> Bullish pro pár
+        rate_diff = latest_base - latest_quote
+        
+        # Ošetření: Pro páry začínající na USD (USDJPY), Base je USD. diff = fed - boj. To je kladné.
+        # Pro EURNZD: Base je EUR. diff = ecb - rbnz.
+        # Obecně: policy_score = rate_diff * 2.0
+        scores["interest_rates"] = float(max(-10.0, min(10.0, rate_diff * 2.0)))
+        
         indicator_ages["interest_rates"] = 0  # počítáme denně (fallback)
         logger.warning(
             f"Bond yields nedostupné — fallback na policy rate: "
-            f"Fed={latest_fed:.2f}%, ECB={latest_ecb:.2f}%, "
-            f"diff={diff:.2f}% → score={scores['interest_rates']:.4f}"
+            f"QuoteRate={latest_quote:.2f}%, BaseRate={latest_base:.2f}%, "
+            f"diff={rate_diff:.2f}% → score={scores['interest_rates']:.4f}"
         )
-
 
     # ---------------------------------------------------------
     # KROK 4: PŘÍPRAVA BUDOUCÍCH UDÁLOSTÍ PRO PREDIKCE
@@ -339,7 +378,7 @@ async def run_daily_update(pair: str = "EURUSD"):
     poly_markets = await fetch_polymarket_economics()
     
     # Získáme Euribor/OIS pravděpodobnosti pro zasedání ECB
-    euribor_data = await fetch_euribor_signal(current_ecb_rate=latest_ecb)
+    euribor_data = await fetch_euribor_signal(current_ecb_rate=latest_base, pair=pair)
     euribor_prob = None
     if euribor_data:
         # Převedeme pravděpodobnosti na signál: 1.0 = hike, 0.5 = hold, 0.0 = cut
@@ -426,8 +465,8 @@ async def run_daily_update(pair: str = "EURUSD"):
         from prediction.generator import generate_7day_prediction
         from prediction.accuracy import evaluate_predictions_accuracy
         
-        await generate_7day_prediction(daily_model.total, daily_model.weights)
-        await evaluate_predictions_accuracy()
+        await generate_7day_prediction(daily_model.total, daily_model.weights, pair=pair)
+        await evaluate_predictions_accuracy(pair=pair)
         
     except Exception as e:
         logger.error(f"Nepodařilo se dokončit predikce nebo uložit nadcházející události: {e}")

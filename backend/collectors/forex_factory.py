@@ -22,9 +22,14 @@ class FFEvent(BaseModel):
 TITLE_TO_INDICATOR = {
     # ── INFLATION ────────────────────────────────────────────────────────
     "CPI m/m":                       "cpi",
-    "CPI y/y":                       "cpi",
     "Core CPI m/m":                  "cpi",
+    "CPI y/y":                       "cpi",
     "Core CPI y/y":                  "cpi",
+    "Tokyo Core CPI y/y":            "cpi",
+    "National Core CPI y/y":         "cpi",
+    "Core PCE Price Index m/m":      "pce",
+    "PCE Price Index m/m":           "pce",
+    "PCE Price Index y/y":           "pce",
     "PPI m/m":                       "cpi",
     "Core PPI m/m":                  "cpi",
     "PPI y/y":                       "cpi",
@@ -92,6 +97,17 @@ TITLE_TO_INDICATOR = {
     "ECB Meeting Accounts":          "ecb_rate",
     "Fed Chair":                     "fed_rate",
     "ECB President":                 "ecb_rate",
+    "Official Bank Rate":            "boe_rate",
+    "BOE Monetary Policy Report":    "boe_rate",
+    "MPC Official Bank Rate Votes":  "boe_rate",
+    "BOE Gov":                       "boe_rate",
+    "BOJ Policy Rate":               "boj_rate",
+    "BOJ Press Conference":          "boj_rate",
+    "BOJ Gov":                       "boj_rate",
+    "Official Cash Rate":            "rbnz_rate",
+    "RBNZ Rate Statement":           "rbnz_rate",
+    "RBNZ Gov":                      "rbnz_rate",
+    "RBNZ Press Conference":         "rbnz_rate",
 }
 
 def map_ff_title_to_indicator(title: str) -> Optional[str]:
@@ -101,12 +117,16 @@ def map_ff_title_to_indicator(title: str) -> Optional[str]:
             return indicator
     return None
 
-async def fetch_forex_factory_week() -> List[FFEvent]:
+async def fetch_forex_factory_week(pair: str = "EURUSD") -> List[FFEvent]:
     """
     Stáhne JSON kalendář z Forex Factory pro tento týden.
-    Vyfiltruje jen EUR a USD s High/Medium dopadem.
+    Vyfiltruje jen měny z daného páru s High/Medium dopadem.
     """
-    logger.info("Fetching Forex Factory calendar from unofficial JSON API...")
+    base = pair[:3]
+    quote = pair[3:]
+    allowed_countries = [base, quote]
+    
+    logger.info(f"Fetching Forex Factory calendar for {pair} ({allowed_countries})...")
     
     events = []
     try:
@@ -119,16 +139,23 @@ async def fetch_forex_factory_week() -> List[FFEvent]:
                 country = item.get("country", "")
                 impact = item.get("impact", "")
                 
-                # Zajímají nás jen EUR/USD a High/Medium dopad
-                if country not in ["USD", "EUR"] or impact not in ["High", "Medium"]:
+                # Zajímají nás jen base a quote s High/Medium dopadem
+                if country not in allowed_countries or impact not in ["High", "Medium"]:
                     continue
                 
                 title = item.get("title", "")
                 # Zkusíme namapovat
                 indicator_key = map_ff_title_to_indicator(title)
                 if indicator_key:
-                    if indicator_key not in ["fed_rate", "ecb_rate"]:
-                        suffix = "us" if country == "USD" else "eu"
+                    if indicator_key not in ["fed_rate", "ecb_rate", "boe_rate"]:
+                        if country == "USD":
+                            suffix = "us"
+                        elif country == "EUR":
+                            suffix = "eu"
+                        elif country == "GBP":
+                            suffix = "uk"
+                        else:
+                            suffix = country.lower()
                         indicator_key = f"{indicator_key}_{suffix}"
                 
                 # Zpracování data (očekávaný formát: 2025-01-15T13:30:00-05:00)

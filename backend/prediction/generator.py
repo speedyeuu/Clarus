@@ -24,19 +24,35 @@ def calculate_confidence(events_count: int) -> float:
 SPECIFIC_TO_GENERIC = {
     "cpi_us":           "inflation",
     "cpi_eu":           "inflation",
+    "cpi_uk":           "inflation",
     "pce_us":           "inflation",
+    "pce_eu":           "inflation",
+    "pce_uk":           "inflation",
     "nfp_us":           "labor",
+    "nfp_eu":           "labor",
+    "nfp_uk":           "labor",
     "unemployment_us":  "labor",
+    "unemployment_eu":  "labor",
+    "unemployment_uk":  "labor",
     "gdp_flash_us":     "gdp",
     "gdp_flash_eu":     "gdp",
+    "gdp_flash_uk":     "gdp",
     "mpmi_us":          "mpmi",
     "mpmi_eu":          "mpmi",
+    "mpmi_uk":          "mpmi",
     "spmi_us":          "spmi",
     "spmi_eu":          "spmi",
+    "spmi_uk":          "spmi",
     "retail_sales_us":  "retail_sales",
     "retail_sales_eu":  "retail_sales",
+    "retail_sales_uk":  "retail_sales",
+    "retail_sales_jp":  "retail_sales",
     "fed_rate":         "interest_rates",
     "ecb_rate":         "interest_rates",
+    "boe_rate":         "interest_rates",
+    "boc_rate":         "interest_rates",
+    "boj_rate":         "interest_rates",
+    "rbnz_rate":        "interest_rates",
 }
 
 def map_probability_to_score_shift(probability: float, indicator_weight: float, invert: bool = False) -> float:
@@ -61,7 +77,7 @@ def map_probability_to_score_shift(probability: float, indicator_weight: float, 
     return shift
 
 
-async def calculate_polymarket_calibration() -> float:
+async def calculate_polymarket_calibration(pair: str = "EURUSD") -> float:
     """
     Porovnává historické předpovědi Polymarketu s reálnými výsledky z indicator_readings.
     Vrací koeficient spolehlivosti (dampening factor) od 0.1 do 1.0.
@@ -110,15 +126,19 @@ async def calculate_polymarket_calibration() -> float:
                 continue
                 
             # Určíme, zda má vyšší pravděpodobnost znamenat kladné nebo záporné překvapení
-            # (Inverze pro USD zprávy v EUR/USD páru)
+            # (Inverze pro Base/Quote měnu)
+            base_currency = pair[:3]
+            quote_currency = pair[3:]
+            
             invert = False
-            if country == "USD":
+            if country == base_currency:
+                invert = False
+                if ind_key and "unemployment" in ind_key.lower():
+                    invert = True
+            elif country == quote_currency:
                 invert = True
                 if ind_key and "unemployment" in ind_key.lower():
                     invert = False
-            elif country == "EUR":
-                if ind_key and "unemployment" in ind_key.lower():
-                    invert = True
                     
             # Směr předpovídaný Polymarketem (očekáváme YES = růst hodnoty)
             pred_dir = 1 if prob > 0.5 else -1 if prob < 0.5 else 0
@@ -147,7 +167,7 @@ async def calculate_polymarket_calibration() -> float:
         logger.warning(f"Chyba při výpočtu kalibrace Polymarketu: {e}")
         return 0.8
 
-async def generate_7day_prediction(current_total_score: float, current_weights: dict):
+async def generate_7day_prediction(current_total_score: float, current_weights: Dict[str, float], pair: str = "EURUSD"):
     """
     Vygeneruje odhad skóre na dalších 7 dní a zapíše do tabulky predictions.
 
@@ -164,7 +184,7 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
     logger.info("Generování 7denní predikce (s vylepšenou logikou)...")
 
     # 1. Kalibrační faktor pro Polymarket
-    calibration_factor = await calculate_polymarket_calibration()
+    calibration_factor = await calculate_polymarket_calibration(pair)
 
     # 2. Budoucí události z databáze
     cutoff = (today_date + timedelta(days=7)).isoformat()
@@ -189,8 +209,8 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
 
     # HIGH-IMPACT eventy pro zastavení mean reversion
     HIGH_IMPACT_KEYS = {
-        "nfp_us", "cpi_us", "cpi_eu", "pce_us",
-        "fed_rate", "ecb_rate", "gdp_flash_us", "gdp_flash_eu"
+        "nfp_us", "cpi_us", "cpi_eu", "cpi_uk", "pce_us",
+        "fed_rate", "ecb_rate", "boe_rate", "gdp_flash_us", "gdp_flash_eu", "gdp_flash_uk"
     }
 
     def is_high_impact_day(date_str: str) -> bool:
@@ -222,14 +242,18 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
         else:
             prob = 0.5
 
+        base_currency = pair[:3]
+        quote_currency = pair[3:]
+        
         invert = False
-        if country == "USD":
+        if country == base_currency:
+            invert = False
+            if indicator_key and "unemployment" in indicator_key.lower():
+                invert = True
+        elif country == quote_currency:
             invert = True
             if indicator_key and "unemployment" in indicator_key.lower():
                 invert = False
-        elif country == "EUR":
-            if indicator_key and "unemployment" in indicator_key.lower():
-                invert = True
 
         return map_probability_to_score_shift(prob, weight, invert)
 
@@ -258,7 +282,6 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
             for score_ref in ["baseline", "beat", "miss"]:
                 s = locals()[f"running_{score_ref}"]
                 if s > 0:
-                    locals()[f"running_{score_ref}"]
                     if score_ref == "baseline":
                         running_baseline -= min(running_baseline, mean_reversion_daily)
                     elif score_ref == "beat":
@@ -308,21 +331,19 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
         running_beat     = max(-10.0, min(10.0, running_beat + beat_shift))
         running_miss     = max(-10.0, min(10.0, running_miss + miss_shift))
 
-        # --- Confidence bands (OPRAVENO) ---
-        # Více eventů = VĚTŠÍ nejistota (každý může překvapit v libovolném směru)
-        # Starý kód byl obráceně: více eventů = menší band (špatně!)
+        # --- Confidence bands ---
         base_band = 0.8                          # Základní nejistota bez zpráv
         event_uncertainty = len(day_events) * 0.5  # +0.5 za každý event
         band_width = float(min(4.0, base_band + event_uncertainty))
 
-        # Informace pro confidence (teď odděleno od band_width)
+        # Informace pro confidence
         n_ev = len(day_events)
         confidence = 0.3 if n_ev == 0 else 0.5 if n_ev == 1 else 0.65 if n_ev == 2 else 0.75
 
         record = {
             "created_date": today_str,
             "prediction_date": pred_str,
-            "pair": "EURUSD",
+            "pair": pair,
             "predicted_score_mid":  float(running_baseline),
             "predicted_score_low":  float(max(-10.0, min(10.0, running_baseline - band_width))),
             "predicted_score_high": float(max(-10.0, min(10.0, running_baseline + band_width))),
@@ -341,15 +362,15 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
     score_change = end_score - current_total_score
 
     if end_score > 3.0:
-        direction_label = "📈 Bullish EUR/USD"
+        direction_label = f"📈 Bullish {pair}"
     elif end_score > 1.0:
-        direction_label = "🟢 Mírně Bullish EUR/USD"
+        direction_label = f"🟢 Mírně Bullish {pair}"
     elif end_score > -1.0:
-        direction_label = "⚪ Neutrální EUR/USD"
+        direction_label = f"⚪ Neutrální {pair}"
     elif end_score > -3.0:
-        direction_label = "🟡 Mírně Bearish EUR/USD"
+        direction_label = f"🟡 Mírně Bearish {pair}"
     else:
-        direction_label = "📉 Bearish EUR/USD"
+        direction_label = f"📉 Bearish {pair}"
 
     change_str = f"{score_change:+.2f} bodu" if abs(score_change) > 0.1 else "bez velké změny"
 
@@ -381,11 +402,15 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
 
     # Uložit predikce do DB
     try:
-        for p in predictions_to_save:
-            db.table("predictions").upsert(p, on_conflict="created_date,prediction_date,pair").execute()
-        logger.info(f"Úspěšně vytvořeno a uloženo {len(predictions_to_save)} predikcí.")
+        # Smazat staré predikce pro daný pár od dneška dál, abychom nenakumulovali duplikáty
+        db.table("predictions").delete().gte("prediction_date", today_str).eq("pair", pair).execute()
+        
+        # Uložit nové
+        if predictions_to_save:
+            db.table("predictions").insert(predictions_to_save).execute()
+            logger.info("Úspěšně uloženy predikce na 7 dní.")
+            
     except Exception as e:
-        logger.error(f"Nepodařilo se uložit predikce: {e}")
+        logger.error(f"Nepodařilo se uložit predikce do DB: {e}")
 
     return week_summary
-

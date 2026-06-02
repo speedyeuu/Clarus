@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from db.client import get_supabase
 
 
-async def evaluate_predictions_accuracy():
+async def evaluate_predictions_accuracy(pair: str = "EURUSD"):
     """
     Vyhodnotí přesnost minulých predikcí mířících na dnešek.
     Spouští se v rámci Daily Pipeline PO výpočtu aktuálního skóre.
@@ -22,9 +22,7 @@ async def evaluate_predictions_accuracy():
     today_str = datetime.now().date().isoformat()
     yesterday_str = (datetime.now().date() - timedelta(days=1)).isoformat()
 
-    logger.info(f"Vyhodnocuji zpětně přesnost minulých predikcí mířících na {today_str}...")
-
-    pair = "EURUSD"
+    logger.info(f"Vyhodnocuji zpětně přesnost minulých predikcí mířících na {today_str} pro pár {pair}...")
 
     try:
         # Získáme reálné dnešní skóre (výsledek dnešního pipeline)
@@ -33,14 +31,13 @@ async def evaluate_predictions_accuracy():
             .select("total_score")
             .eq("date", today_str)
             .eq("pair", pair)
-            .single()
             .execute()
         )
         if not res_today.data:
             logger.warning("Chybí dnešní skóre pro vyhodnocení přesnosti predikcí.")
             return
 
-        actual_score = float(res_today.data["total_score"])
+        actual_score = float(res_today.data[0]["total_score"])
 
         # Včerejší skóre pro výpočet směrové složky
         res_yesterday = (
@@ -48,10 +45,9 @@ async def evaluate_predictions_accuracy():
             .select("total_score")
             .eq("date", yesterday_str)
             .eq("pair", pair)
-            .single()
             .execute()
         )
-        yesterday_score = float(res_yesterday.data["total_score"]) if res_yesterday.data else None
+        yesterday_score = float(res_yesterday.data[0]["total_score"]) if res_yesterday.data else None
 
         # Skutečný směr pohybu (dnešek vs včerejšek)
         if yesterday_score is not None:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DailyScore, Prediction, AccuracySummary, getScoreColor } from "@/lib/types";
+import { DailyScore, Prediction, AccuracySummary, getScoreColor, INDICATOR_META } from "@/lib/types";
 
 interface ChartPoint {
   date: string;
@@ -116,22 +116,37 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
     const { utils, write } = await import("xlsx");
     const pairName = history.length > 0 && history[0].pair ? history[0].pair : "EUR_USD";
 
+    const indicators = Object.keys(INDICATOR_META).sort(
+      (a, b) => INDICATOR_META[a].order - INDICATOR_META[b].order
+    );
+
+    const headers = ["Datum", "Overall Score", ...indicators.map(k => INDICATOR_META[k].label)];
+
     // Připrav data jako pole objektů
     const rows = [
       ["Clarus Trading Software – Export dat pro pár: " + pairName],
       [],
-      ["Datum", "Overall Score"],
+      headers,
       ...history.map((d) => {
         const [year, month, day] = d.date.split("-");
-        return [`${day}.${month}.${year}`, d.total_score];
+        const rowData: any[] = [`${day}.${month}.${year}`, d.total_score];
+        
+        indicators.forEach(k => {
+          const val = (d as any)[k];
+          rowData.push(val !== undefined && val !== null ? val : "N/A");
+        });
+        
+        return rowData;
       }),
     ];
 
     const wb = utils.book_new();
     const ws = utils.aoa_to_sheet(rows);
 
-    // Nastav šířky sloupců: Datum = 15 znaků, Score = 16 znaků
-    ws["!cols"] = [{ wch: 15 }, { wch: 16 }];
+    // Nastav šířky sloupců: Datum = 15 znaků, Score = 16 znaků, Ostatní = 15 znaků
+    const colWidths = [{ wch: 15 }, { wch: 16 }];
+    indicators.forEach(() => colWidths.push({ wch: 15 }));
+    ws["!cols"] = colWidths;
 
     utils.book_append_sheet(wb, ws, pairName.replace("/", "_"));
 

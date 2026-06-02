@@ -16,7 +16,7 @@ function IndicatorRow({ scoreKey, value, weight }: {
   const bar = scoreToBar(value);
   const color = getScoreColor(value);
   const label = value !== null ? getScoreLabel(value) : "N/A";
-  const displayValue = value !== null ? (value > 0 ? `+${value.toFixed(0)}` : value.toFixed(0)) : "—";
+  const displayValue = value !== null ? (value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1)) : "—";
 
   return (
     <div style={{
@@ -78,8 +78,8 @@ export default function ScoreOverview({ score }: Props) {
   const totalColor = getScoreColor(score.total_score);
   const totalLabel = getScoreLabel(score.total_score);
   const totalDisplay = score.total_score > 0
-    ? `+${score.total_score.toFixed(0)}`
-    : score.total_score.toFixed(0);
+    ? `+${score.total_score.toFixed(1)}`
+    : score.total_score.toFixed(1);
 
   const indicators = Object.keys(INDICATOR_META).sort(
     (a, b) => INDICATOR_META[a].order - INDICATOR_META[b].order

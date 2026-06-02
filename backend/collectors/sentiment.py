@@ -8,7 +8,7 @@ class SentimentData(BaseModel):
     long_pct: float
     short_pct: float
 
-async def fetch_retail_sentiment() -> Optional[SentimentData]:
+async def fetch_retail_sentiment(pair: str = "EURUSD") -> Optional[SentimentData]:
     """
     Získá komunitní náladu (Sentiment) od maloobchodních obchodníků přes volné API MyFXBook.
     Oandu jsme zahodili kvůli EU regulacím/placeným účtům.
@@ -38,22 +38,22 @@ async def fetch_retail_sentiment() -> Optional[SentimentData]:
                 logger.error("MyFXBook nevrátil platné Session ID.")
                 return None
                 
-            # Krok B: Stažení globální nálady na EURUSD
+            # Krok B: Stažení globální nálady na zadaný pár
             url = f"https://www.myfxbook.com/api/get-community-outlook.json?session={session_id}"
             r_sentiment = await client.get(url)
             sentiment_data = r_sentiment.json()
             
             symbols = sentiment_data.get("symbols", [])
             for sym in symbols:
-                if sym.get("name") == "EURUSD":
+                if sym.get("name") == pair:
                     # Myfxbook vrací např. longPercentage = 65.4, takže převedeme na poměr 0-1
                     longs = float(sym.get("longPercentage", 50)) / 100.0
                     shorts = float(sym.get("shortPercentage", 50)) / 100.0
                     
-                    logger.info(f"MyFXBook nahlásil Sentiment: Lidi z {longs*100}% kupují a ze {shorts*100}% prodávají.")
+                    logger.info(f"MyFXBook nahlásil Sentiment [{pair}]: Lidi z {longs*100}% kupují a ze {shorts*100}% prodávají.")
                     return SentimentData(long_pct=longs, short_pct=shorts)
                     
-            logger.warning("V MyFXBook záznamech chyběl měnový pár EURUSD.")
+            logger.warning(f"V MyFXBook záznamech chyběl měnový pár {pair}.")
             return None
             
     except Exception as e:

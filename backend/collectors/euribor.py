@@ -116,20 +116,21 @@ async def _fetch_euribor3m_fred() -> Optional[float]:
     return None
 
 
-async def fetch_euribor_signal(current_ecb_rate: float = 3.25) -> Optional[EuriborSignal]:
+async def fetch_euribor_signal(current_ecb_rate: float = 3.25, pair: str = "EURUSD") -> Optional[EuriborSignal]:
     """
-    Získá implikovanou pravděpodobnost pohybu sazeb ECB z tržních dat.
-    
-    Strategie (cascade):
-    1. PRIMARY:   Euribor 3M z FRED (IR3TIB01EZM156N) — reálné Euribor fixingy, bez API klíče
-    2. SECONDARY: €STR z ECB SDMX API — denně aktualizovaná overnight sazba ECB (≈ deposit rate)
-    3. FALLBACK:  Pokud selžou oba zdroje, vrací None (pipeline pokračuje bez signálu)
+    Hlavní vstupní bod pro Euribor OIS signál.
+    Funguje pouze pro EURUSD.
     
     Interpretace:
     - Euribor 3M = tržní sazba pro 3měsíční mezibankovní půjčky v EUR
     - Pokud je Euribor 3M níže než aktuální ECB sazba → trh čeká snížení
     - Divergence o 0.25% = 100% šance na jeden pohyb (cut nebo hike)
     """
+    if pair != "EURUSD":
+        logger.info(f"OIS Signál (Euribor) je podporován jen pro EURUSD, přeskočeno pro {pair}.")
+        return None
+        
+    logger.info("Zjišťuji tržní očekávání na sazby (Euribor/OIS)...")
 
     # --- 1. Primární: Euribor 3M z FRED ---
     euribor_3m = await _fetch_euribor3m_fred()

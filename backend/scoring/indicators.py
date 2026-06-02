@@ -7,8 +7,9 @@ from .normalizer import NormalizationStats, normalize_surprise_to_score, parse_f
 
 
 def score_bond_spread(
-    us_2y_history: Dict[str, float],
-    de_2y_history: Dict[str, float],
+    quote_2y_history: Dict[str, float],
+    base_2y_history: Dict[str, float],
+    pair: str = "EURUSD"
 ) -> float:
     """
     Vypočítá skóre z US-DE 2Y dluhopisového spreadu.
@@ -27,12 +28,12 @@ def score_bond_spread(
     Průměrná denní změna spreadu je ~4-5 bps → průměrný denní skok skóre ~±0.26.
     Extrémní den (12 bps) → skok ~±0.69. Žádné divoké výkyvy.
     """
-    common_dates = sorted(set(us_2y_history.keys()) & set(de_2y_history.keys()))
+    common_dates = sorted(set(quote_2y_history.keys()) & set(base_2y_history.keys()))
 
     if len(common_dates) < 5:
         return 0.0
 
-    spreads = [us_2y_history[d] - de_2y_history[d] for d in common_dates]
+    spreads = [quote_2y_history[d] - base_2y_history[d] for d in common_dates]
     current_spread = spreads[-1]
 
     if len(spreads) >= 2:
@@ -45,16 +46,24 @@ def score_bond_spread(
         # Historický rozsah US-DE 2Y spreadu: ~0% až ~3.5%, střed ~1.5%
         z_score = (current_spread - 1.5) / 1.0
 
-    # Invertujeme: kladný Z-score (spread se rozšiřuje = USD silnější) → záporné skóre
-    raw_score = -z_score * 3.33
+    # Normalizace Z-score do bodů
+    # Běžně: Kladný Z-score (spread se rozšiřuje, US výnos roste nad Base) = USD silnější.
+    if pair.startswith("USD"):
+        # USD je Base: Silný USD = Pár roste (Bullish) → Kladné skóre
+        raw_score = z_score * 3.33
+    else:
+        # USD je Quote (EURUSD, GBPUSD): Silný USD = Pár klesá (Bearish) → Záporné skóre
+        raw_score = -z_score * 3.33
+        
     return float(max(-10.0, min(10.0, raw_score)))
 
 
 def score_combined_interest_rates(
-    us_2y_history: Dict[str, float],
-    de_2y_history: Dict[str, float],
-    fed_rate: float,
-    ecb_rate: float,
+    quote_2y_history: Dict[str, float],
+    base_2y_history: Dict[str, float],
+    quote_rate: float,
+    base_rate: float,
+    pair: str = "EURUSD"
 ) -> Tuple[float, float, float, str]:
     """
     Kombinuje bond spread (70%) a policy rate differential (30%) do jednoho skóre.
@@ -66,27 +75,32 @@ def score_combined_interest_rates(
 
     Vrací: (combined_score, bond_spread_score, policy_score, log_zprava)
     """
-    # --- Bond Spread složka ---
-    bond_score = score_bond_spread(us_2y_history, de_2y_history)
+    if quote_2y_history and base_2y_history:
+        bond_score = score_bond_spread(quote_2y_history, base_2y_history, pair)
+    else:
+        bond_score = 0.0
 
-    # --- Policy Rate složka (stejný vzorec jako dřív) ---
-    policy_diff = fed_rate - ecb_rate  # kladné = USD platí víc = bearish EUR
-    policy_score = float(max(-10.0, min(10.0, policy_diff * -2.0)))
+    # 2. Policy rate differential
+    # Score by mělo být KLADNÉ (Bullish), pokud Base měna platí více než Quote měna.
+    rate_diff = base_rate - quote_rate
+        
+    # Kladný rate_diff znamená, že Base měna je úrokově atraktivnější -> Kladné skóre
+    policy_score = float(max(-10.0, min(10.0, rate_diff * 2.0)))
 
     # --- Kombinace: 70% tržní signál + 30% strukturální kotva ---
     combined = 0.70 * bond_score + 0.30 * policy_score
     combined = float(max(-10.0, min(10.0, combined)))
 
     # Aktuální spread pro logging
-    common = sorted(set(us_2y_history.keys()) & set(de_2y_history.keys()))
+    common = sorted(set(quote_2y_history.keys()) & set(base_2y_history.keys()))
     if common:
-        current_spread = us_2y_history[common[-1]] - de_2y_history[common[-1]]
-        us_val = us_2y_history[common[-1]]
-        de_val = de_2y_history[common[-1]]
+        current_spread = quote_2y_history[common[-1]] - base_2y_history[common[-1]]
+        us_val = quote_2y_history[common[-1]]
+        de_val = base_2y_history[common[-1]]
         log_msg = (
-            f"Bond spread (US 2Y={us_val:.3f}%, DE 2Y={de_val:.3f}%, "
+            f"Bond spread (Quote 2Y={us_val:.3f}%, Base 2Y={de_val:.3f}%, "
             f"spread={current_spread:.3f}%) → bond_score={bond_score:.2f} | "
-            f"Policy diff (Fed={fed_rate:.2f}%, ECB={ecb_rate:.2f}%) → policy_score={policy_score:.2f} | "
+            f"Policy diff (Quote={quote_rate:.2f}%, Base={base_rate:.2f}%) → policy_score={policy_score:.2f} | "
             f"Combined (70/30): {combined:.4f}"
         )
     else:
@@ -337,28 +351,32 @@ def get_entry_signal(rsi: float, total_score: float, adx: float) -> dict:
 
 
 
-def score_seasonality() -> float:
+def score_seasonality(pair: str = "EURUSD") -> float:
     """
-    Vrací historickou průměrnou sílu EUR v daném měsíci (historicky nejlepší prosinec).
-    Vycházíme z plan.md.
+    Vrací historickou průměrnou sílu Base měny vůči USD v daném měsíci.
     """
     month = datetime.now().month
     
-    # Odhad sezónnosti pro EUR/USD převzatý z plánu a reálných tabulek přepočítaný na celá čísla -10 až +10.
-    # Např. prosinec +8 (extrémně silný EUR), březen -5, apod.
-    seasonality_map = {
-        1: -3.0,  # Leden: Typicky silnější USD
-        2: -2.0,
-        3: -5.0,  # Březen mívá silný USD (repatriace)
-        4: 3.0,   # Duben: Tradičně dobrý měsíc pro EUR
-        5: -3.0,
-        6: 0.0,
-        7: 2.0,
-        8: -3.0,
-        9: -2.0,
-        10: 3.0,
-        11: -2.0,
-        12: 8.0   # Prosinec: Fenomén "End of Year EUR rally", slabý USD
+    # Odhad sezónnosti pro EUR/USD a GBP/USD.
+    seasonality_maps = {
+        "EURUSD": {
+            1: -3.0, 2: -2.0, 3: -5.0, 4: 3.0, 5: -3.0, 6: 0.0,
+            7: 2.0, 8: -3.0, 9: -2.0, 10: 3.0, 11: -2.0, 12: 8.0
+        },
+        "GBPUSD": {
+            1: -2.0, 2: -3.0, 3: -4.0, 4: 6.0, 5: -2.0, 6: -1.0,
+            7: 3.0, 8: -3.0, 9: -2.0, 10: 1.0, 11: 2.0, 12: 4.0
+        },
+        "USDJPY": {
+            # Březen/Duben jsou typicky silné pro JPY kvůli repatriaci kapitálu, což znamená Bearish pro USDJPY
+            1: 2.0, 2: 1.0, 3: -3.0, 4: -2.0, 5: 1.0, 6: 0.0,
+            7: -1.0, 8: -1.0, 9: 2.0, 10: 1.0, 11: 2.0, 12: -2.0
+        },
+        "EURNZD": {
+            1: -1.0, 2: -1.0, 3: 0.0, 4: 2.0, 5: 1.0, 6: 0.0,
+            7: 1.0, 8: 1.0, 9: 1.0, 10: -1.0, 11: -1.0, 12: -1.0
+        }
     }
     
-    return float(seasonality_map.get(month, 0.0))
+    pair_map = seasonality_maps.get(pair, seasonality_maps["EURUSD"])
+    return float(pair_map.get(month, 0.0))
