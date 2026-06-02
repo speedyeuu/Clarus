@@ -119,6 +119,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         </div>
       )}
 
+      {!error_msg && !today_score && (
+        <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", border: "1px dashed var(--border)", borderRadius: "8px", marginTop: "20px" }}>
+          <strong>Zatím žádná data pro {pairLabel}</strong>
+          <p style={{ marginTop: "10px", fontSize: "14px" }}>
+            Tento měnový pár byl buď právě přidán, nebo probíhá stahování prvních dat. Skóre se objeví po dalším updatu databáze.
+          </p>
+        </div>
+      )}
+
       {!error_msg && today_score && (
         <div className="dashboard-grid">
 

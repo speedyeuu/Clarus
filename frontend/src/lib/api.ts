@@ -6,6 +6,7 @@ async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     next: { revalidate: 60 }, // ISR: revalidate každých 60s
   });
+  if (res.status === 404) return null as T;
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
   return res.json();
 }

@@ -25,27 +25,43 @@ SPECIFIC_TO_GENERIC = {
     "cpi_us":           "inflation",
     "cpi_eu":           "inflation",
     "cpi_uk":           "inflation",
+    "cpi_jpy":          "inflation",
+    "cpi_nzd":          "inflation",
     "pce_us":           "inflation",
     "pce_eu":           "inflation",
     "pce_uk":           "inflation",
+    "pce_jpy":          "inflation",
+    "pce_nzd":          "inflation",
     "nfp_us":           "labor",
     "nfp_eu":           "labor",
     "nfp_uk":           "labor",
+    "nfp_jpy":          "labor",
+    "nfp_nzd":          "labor",
     "unemployment_us":  "labor",
     "unemployment_eu":  "labor",
     "unemployment_uk":  "labor",
+    "unemployment_jpy": "labor",
+    "unemployment_nzd": "labor",
     "gdp_flash_us":     "gdp",
     "gdp_flash_eu":     "gdp",
     "gdp_flash_uk":     "gdp",
+    "gdp_flash_jpy":    "gdp",
+    "gdp_flash_nzd":    "gdp",
     "mpmi_us":          "mpmi",
     "mpmi_eu":          "mpmi",
     "mpmi_uk":          "mpmi",
+    "mpmi_jpy":         "mpmi",
+    "mpmi_nzd":         "mpmi",
     "spmi_us":          "spmi",
     "spmi_eu":          "spmi",
     "spmi_uk":          "spmi",
+    "spmi_jpy":         "spmi",
+    "spmi_nzd":         "spmi",
     "retail_sales_us":  "retail_sales",
     "retail_sales_eu":  "retail_sales",
     "retail_sales_uk":  "retail_sales",
+    "retail_sales_jpy": "retail_sales",
+    "retail_sales_nzd": "retail_sales",
     "retail_sales_jp":  "retail_sales",
     "fed_rate":         "interest_rates",
     "ecb_rate":         "interest_rates",
@@ -186,14 +202,15 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
     # 1. Kalibrační faktor pro Polymarket
     calibration_factor = await calculate_polymarket_calibration(pair)
 
-    # 2. Budoucí události z databáze
-    cutoff = (today_date + timedelta(days=7)).isoformat()
+    base_curr = pair[:3]
+    quote_curr = pair[3:]
     try:
         res = (
             db.table("upcoming_events")
             .select("*")
             .gt("event_date", today_str)
             .lte("event_date", cutoff)
+            .in_("country", [base_curr, quote_curr])
             .execute()
         )
         upcoming = res.data or []
