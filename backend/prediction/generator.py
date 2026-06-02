@@ -7,14 +7,14 @@ from db.client import get_supabase
 # Polymarket probability a OIS signals
 
 def calculate_confidence(events_count: int) -> float:
-    """Čím více událostí se na daný den podílí na predikci, tím je model sebevědomější."""
+    """Čím více událostí se na daný den podílí, tím je VĚTŠÍ nejistota (větší možný rozptyl výsledků)."""
     if events_count == 0:
-        return 0.3 # Jen drift, žádné zprávy = nízká jistota ohledně budoucích pohybů
+        return 0.85 # Jen drift, žádné zprávy = vysoká jistota
     elif events_count == 1:
-        return 0.6
-    elif events_count == 2:
         return 0.75
-    return 0.85
+    elif events_count == 2:
+        return 0.60
+    return 0.30     # Mnoho zpráv = velká nejistota (může to dopadnout jakkoliv)
 
 
 # Mapování specifických klíčů z upcoming_events → generické klíče vah modelu.

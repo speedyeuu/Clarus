@@ -34,7 +34,7 @@ CARRY_FORWARD_CONFIG = {
     # COT: report vychází jednou týdně (pátek), data mají 3denní zpoždění.
     # Nejstarší data mohou být ~10 dní stará → 14 dní s decay správně modeluje postupné stárnutí pozic.
     "cot":              {"max_days": 14, "decay": True},
-    "retail_sentiment": {"max_days": 3,  "decay": False},
+    "retail_sentiment": {"max_days": 7,  "decay": False},
     "seasonality":      {"max_days": 30, "decay": False},
     # DECAY — lineárně klesá k 0 (surprise stárne, trh ho přehodnocuje)
     "inflation":        {"max_days": 30, "decay": True},
