@@ -6,6 +6,7 @@ import SentimentGaugeChart from "@/components/SentimentGaugeChart";
 import TechnicalPanel from "@/components/TechnicalPanel";
 import WeekSummaryPanel from "@/components/WeekSummaryPanel";
 import PairSelector from "@/components/PairSelector";
+import UpdatedAt from "@/components/UpdatedAt";
 import {
   fetchLatestScore,
   fetchScoreHistory,
@@ -60,23 +61,56 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const pairLabel = `${pair.slice(0, 3)}/${pair.slice(3)}`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-      {/* Pair Selector row */}
+      {/* ── TOP BAR ── */}
       <div style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
+        gap: "16px",
         flexWrap: "wrap",
-        gap: "12px",
       }}>
-        <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>
-          <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>Aktivní pár: </span>
-          <span style={{ color: "var(--text-primary)", fontFamily: "monospace" }}>{pairLabel}</span>
-        </div>
+        {/* Clarus wordmark */}
+        <span style={{
+          fontWeight: 700,
+          fontSize: "18px",
+          color: "var(--text-primary)",
+          letterSpacing: "-0.02em",
+          marginRight: "4px",
+        }}>
+          Clarus
+        </span>
+
+        {/* Oddělovač */}
+        <div style={{ width: "1px", height: "20px", background: "var(--border-bright)", flexShrink: 0 }} />
+
+        {/* Aktivní pár label */}
+        <span style={{ fontSize: "12px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+          Aktivní pár:{" "}
+          <strong style={{ color: "var(--text-secondary)", fontFamily: "monospace", fontSize: "13px" }}>
+            {pairLabel}
+          </strong>
+        </span>
+
+        {/* Pair selector tabs */}
         <Suspense fallback={null}>
           <PairSelector activePair={pair} />
         </Suspense>
+
+        {/* Spacer — pushne zbytek doprava */}
+        <div style={{ flex: 1 }} />
+
+        {/* Live dot + aktualizováno */}
+        <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+          <div style={{
+            width: "7px", height: "7px",
+            borderRadius: "50%",
+            background: "var(--bullish)",
+            animation: "pulse-glow 2s infinite",
+            flexShrink: 0,
+          }} />
+          <UpdatedAt />
+        </div>
       </div>
 
       {error_msg && (
