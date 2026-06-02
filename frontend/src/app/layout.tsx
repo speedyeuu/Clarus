@@ -39,41 +39,18 @@ export default function RootLayout({
               alignItems: "center",
               justifyContent: "space-between",
             }}>
-              {/* Logo */}
+              {/* Logo — jen wordmark */}
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "6px",
-                  background: "linear-gradient(135deg, #22d3a0, #0ea5e9)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "14px", fontWeight: "700", color: "#07070f",
-                }}>C</div>
-                <span style={{ fontWeight: "600", fontSize: "15px", color: "var(--text-primary)" }}>
+                <span style={{ fontWeight: "700", fontSize: "16px", color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
                   Clarus
                 </span>
-                <span style={{
-                  fontSize: "11px", fontWeight: "500",
-                  padding: "2px 7px", borderRadius: "4px",
-                  background: "var(--bullish-dim)", color: "var(--bullish)",
-                }}>BETA</span>
               </div>
 
-              {/* Right: updated date + pair */}
+              {/* Right: live dot + updated time */}
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <div className="live-dot" />
                   <UpdatedAt />
-                </div>
-                <div style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: "13px", fontWeight: "500",
-                  color: "var(--text-primary)",
-                  padding: "4px 12px",
-                  background: "var(--bg-elevated)",
-                  borderRadius: "6px",
-                  border: "1px solid var(--border)",
-                }}>
-                  EUR/USD
                 </div>
               </div>
             </div>

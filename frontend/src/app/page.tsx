@@ -34,7 +34,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let weekSummary = null;
   let error_msg: string | null = null;
 
-  // Každý endpoint má vlastní fallback — selhání jednoho neovlivní ostatní panely
   const [latestRes, historyRes, predRes, eventsRes, accuracyRes, techRes, weekRes] =
     await Promise.allSettled([
       fetchLatestScore(pair),
@@ -58,13 +57,22 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   if (weekRes.status === "fulfilled") weekSummary = weekRes.value;
   else console.error("predictions/week-summary failed:", (weekRes as PromiseRejectedResult).reason);
 
+  const pairLabel = `${pair.slice(0, 3)}/${pair.slice(3)}`;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-      {/* Pair Selector — přepínač měnových párů */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-        <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-          Aktivní pár: <strong style={{ color: "var(--text-primary)" }}>{pair.slice(0, 3)}/{pair.slice(3)}</strong>
+      {/* Pair Selector row */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: "12px",
+      }}>
+        <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>
+          <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>Aktivní pár: </span>
+          <span style={{ color: "var(--text-primary)", fontFamily: "monospace" }}>{pairLabel}</span>
         </div>
         <Suspense fallback={null}>
           <PairSelector activePair={pair} />
@@ -79,15 +87,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
       {!error_msg && today_score && (
         <div className="dashboard-grid">
-          <ScoreOverview score={today_score} />
 
+          {/* LEVÝ SLOUPEC: Score Overview + Týdenní výhled */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <ScoreOverview score={today_score} />
+            {/* Týdenní výhled přesunuto dolů pod indikátory — vyplní levý sloupec */}
+            <WeekSummaryPanel summary={weekSummary} />
+          </div>
+
+          {/* PRAVÝ SLOUPEC: Graf + Sentiment gauges + Events */}
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", minWidth: 0 }}>
             <ScoreChart history={history} predictions={predictions} accuracy={accuracy} />
 
-            {/* Týdenní výhled: scénáře, direction label, katalyzátory */}
-            <WeekSummaryPanel summary={weekSummary} />
-
-            {/* Sekundární panely */}
+            {/* Sentiment + COT + Technical vedle sebe */}
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", width: "100%" }}>
               <SentimentGaugeChart
                 title="Retail Sentiment"
@@ -106,6 +118,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
             <EventsPanel events={events} />
           </div>
+
         </div>
       )}
     </div>
