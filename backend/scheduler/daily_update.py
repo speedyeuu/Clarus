@@ -219,19 +219,24 @@ async def run_daily_update(pair: str = "EURUSD"):
         latest_ecb = 4.25
 
     SPECIFIC_TO_GENERIC = {
-        "cpi_us": "inflation",
-        "cpi_eu": "inflation",
-        "pce_us": "inflation",
-        "nfp_us": "labor",
-        "unemployment_us": "labor",
-        "gdp_flash_us": "gdp",
-        "gdp_flash_eu": "gdp",
-        "mpmi_us": "mpmi",
-        "mpmi_eu": "mpmi",
-        "spmi_us": "spmi",
-        "spmi_eu": "spmi",
-        "retail_sales_us": "retail_sales",
-        "retail_sales_eu": "retail_sales",
+        "cpi_us":           "inflation",
+        "cpi_eu":           "inflation",
+        "pce_us":           "inflation",
+        "nfp_us":           "labor",
+        "unemployment_us":  "labor",
+        "gdp_flash_us":     "gdp",
+        "gdp_flash_eu":     "gdp",
+        "mpmi_us":          "mpmi",
+        "mpmi_eu":          "mpmi",
+        "spmi_us":          "spmi",
+        "spmi_eu":          "spmi",
+        "retail_sales_us":  "retail_sales",
+        "retail_sales_eu":  "retail_sales",
+        # Bug #4 fix: rate decisions musí aktualizovat interest_rates score
+        "fed_rate":         "interest_rates",
+        "ecb_rate":         "interest_rates",
+        "boe_rate":         "interest_rates",
+        "boc_rate":         "interest_rates",
     }
 
     for ev in ff_today:
@@ -404,7 +409,7 @@ async def run_daily_update(pair: str = "EURUSD"):
             "label": daily_model.label
         }
         
-        db.table("daily_scores").upsert(score_record, on_conflict="date").execute()
+        db.table("daily_scores").upsert(score_record, on_conflict="date,pair").execute()
         logger.info("Úspěšně zapsáno do tabulky daily_scores.")
 
     except Exception as e:

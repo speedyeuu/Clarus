@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import ScoreOverview from "@/components/ScoreOverview";
 import ScoreChart from "@/components/ScoreChart";
 import EventsPanel from "@/components/EventsPanel";
 import SentimentGaugeChart from "@/components/SentimentGaugeChart";
 import TechnicalPanel from "@/components/TechnicalPanel";
 import WeekSummaryPanel from "@/components/WeekSummaryPanel";
+import PairSelector from "@/components/PairSelector";
 import {
   fetchLatestScore,
   fetchScoreHistory,
@@ -15,7 +17,14 @@ import {
 } from "@/lib/api";
 import type { DailyScore, Prediction, UpcomingEvent, AccuracySummary } from "@/lib/types";
 
-export default async function DashboardPage() {
+interface PageProps {
+  searchParams: Promise<{ pair?: string }>;
+}
+
+export default async function DashboardPage({ searchParams }: PageProps) {
+  const { pair: pairParam } = await searchParams;
+  const pair = (pairParam ?? "EURUSD").toUpperCase();
+
   let today_score: DailyScore | null = null;
   let history: DailyScore[] = [];
   let predictions: Prediction[] = [];
@@ -28,13 +37,13 @@ export default async function DashboardPage() {
   // Každý endpoint má vlastní fallback — selhání jednoho neovlivní ostatní panely
   const [latestRes, historyRes, predRes, eventsRes, accuracyRes, techRes, weekRes] =
     await Promise.allSettled([
-      fetchLatestScore(),
-      fetchScoreHistory(30),
-      fetchPredictions(),
+      fetchLatestScore(pair),
+      fetchScoreHistory(30, pair),
+      fetchPredictions(pair),
       fetchUpcomingEvents(7),
-      fetchAccuracySummary(),
-      fetchTechnicalAnalysis(),
-      fetchWeekSummary(),
+      fetchAccuracySummary(pair),
+      fetchTechnicalAnalysis(pair),
+      fetchWeekSummary(pair),
     ]);
 
   if (latestRes.status === "fulfilled") today_score = latestRes.value;
@@ -51,6 +60,17 @@ export default async function DashboardPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+      {/* Pair Selector — přepínač měnových párů */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+        <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+          Aktivní pár: <strong style={{ color: "var(--text-primary)" }}>{pair.slice(0, 3)}/{pair.slice(3)}</strong>
+        </div>
+        <Suspense fallback={null}>
+          <PairSelector activePair={pair} />
+        </Suspense>
+      </div>
+
       {error_msg && (
         <div style={{ padding: "20px", background: "var(--bearish-dim)", color: "var(--bearish)", border: "1px solid var(--border)", borderRadius: "8px" }}>
           <strong>Chyba:</strong> {error_msg}

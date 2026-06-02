@@ -6,21 +6,31 @@ from scheduler.daily_update import run_daily_update
 
 router = APIRouter()
 
-async def _run_pipeline_safe():
-    """Wrapper — zachytí výjimky a zapíše je do Railway logů."""
-    try:
-        logger.info("=== CRON: Pipeline start ===")
-        await run_daily_update()
-        logger.info("=== CRON: Pipeline dokončen — data zapsána do Supabase ===")
-    except Exception as e:
-        logger.error(f"=== CRON: Pipeline selhal: {e} ===")
+
+def _get_active_pairs() -> list[str]:
+    settings = get_settings()
+    raw = getattr(settings, "active_pairs", "EURUSD")
+    return [p.strip().upper() for p in raw.split(",") if p.strip()]
+
+
+async def _run_pipeline_safe(pairs: list[str]):
+    """Wrapper — spustí pipeline pro každý aktivní pár."""
+    for pair in pairs:
+        try:
+            logger.info(f"=== CRON: Pipeline start [{pair}] ===")
+            await run_daily_update(pair=pair)
+            logger.info(f"=== CRON: Pipeline dokončen [{pair}] — data zapsána do Supabase ===")
+        except Exception as e:
+            logger.error(f"=== CRON: Pipeline selhal [{pair}]: {e} ===")
+
 
 @router.post("/update")
 async def trigger_daily_update(
     background_tasks: BackgroundTasks,
     authorization: Optional[str] = Header(None),
+    pair: Optional[str] = None,  # volitelně jen jeden pár
 ):
-    """Cron endpoint — volán z cron-job.org každý den."""
+    """Cron endpoint — volán z cron-job.org každý den. Podporuje ?pair=GBPUSD pro konkrétní pár."""
     settings = get_settings()
 
     token = (
@@ -33,10 +43,9 @@ async def trigger_daily_update(
         logger.warning("Cron zablokován — neplatný klíč.")
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    logger.info("Cron autorizován — spouštím pipeline.")
-    # FastAPI nativně podporuje async funkce v BackgroundTasks
-    background_tasks.add_task(_run_pipeline_safe)
+    # Pokud je specifikován konkrétní pár, spustíme jen pro něj; jinak všechny aktivní
+    pairs_to_run = [pair.upper()] if pair else _get_active_pairs()
+    logger.info(f"Cron autorizován — spouštím pipeline pro páry: {pairs_to_run}")
+    background_tasks.add_task(_run_pipeline_safe, pairs_to_run)
 
-    return {"status": "success", "message": "Pipeline spuštěn."}
-
-
+    return {"status": "success", "message": f"Pipeline spuštěn pro páry: {pairs_to_run}"}

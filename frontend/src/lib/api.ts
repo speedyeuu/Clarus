@@ -10,27 +10,28 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
-export async function fetchLatestScore() {
-  return apiGet<DailyScore>("/api/score/latest");
+export async function fetchLatestScore(pair = "EURUSD") {
+  return apiGet<DailyScore>(`/api/score/latest?pair=${pair}`);
 }
 
-export async function fetchScoreHistory(days = 30) {
-  return apiGet<DailyScore[]>(`/api/score/history?days=${days}`);
+export async function fetchScoreHistory(days = 30, pair = "EURUSD") {
+  return apiGet<DailyScore[]>(`/api/score/history?days=${days}&pair=${pair}`);
 }
 
-export async function fetchPredictions() {
-  return apiGet<Prediction[]>("/api/predictions/");
+export async function fetchPredictions(pair = "EURUSD") {
+  return apiGet<Prediction[]>(`/api/predictions/?pair=${pair}`);
 }
 
-export async function fetchAccuracySummary(): Promise<AccuracySummary> {
+export async function fetchAccuracySummary(pair = "EURUSD"): Promise<AccuracySummary> {
   try {
-    return await apiGet<AccuracySummary>("/api/predictions/accuracy-summary");
+    return await apiGet<AccuracySummary>(`/api/predictions/accuracy-summary?pair=${pair}`);
   } catch {
     return { week_avg: null, month_avg: null, week_count: 0, month_count: 0 };
   }
 }
 
 export async function fetchUpcomingEvents(days = 7) {
+  // Eventy jsou sdílené napříč páry (FF kalendář), pair se neposílá
   return apiGet<UpcomingEvent[]>(`/api/events/upcoming?days=${days}`);
 }
 
@@ -56,9 +57,9 @@ export interface TechnicalData {
   rsi_zone: "oversold" | "overbought" | "normal";
 }
 
-export async function fetchTechnicalAnalysis(): Promise<TechnicalData | null> {
+export async function fetchTechnicalAnalysis(pair = "EURUSD"): Promise<TechnicalData | null> {
   try {
-    return await apiGet<TechnicalData>("/api/score/technical");
+    return await apiGet<TechnicalData>(`/api/score/technical?pair=${pair}`);
   } catch {
     return null;
   }
@@ -86,9 +87,9 @@ export interface WeekSummary {
   total_prediction_days: number;
 }
 
-export async function fetchWeekSummary(): Promise<WeekSummary | null> {
+export async function fetchWeekSummary(pair = "EURUSD"): Promise<WeekSummary | null> {
   try {
-    return await apiGet<WeekSummary>("/api/predictions/week-summary");
+    return await apiGet<WeekSummary>(`/api/predictions/week-summary?pair=${pair}`);
   } catch {
     return null;
   }

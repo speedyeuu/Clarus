@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     myfxbook_email: str = ""
     myfxbook_password: str = ""
     cron_secret: str = "TajnySuperKlicProCloudCronUpdate!2026"
+    active_pairs: str = "EURUSD"  # čárkou oddělené páry: "EURUSD,GBPUSD"
 
     next_public_api_url: str = "http://localhost:8000"
 

@@ -7,6 +7,16 @@ from apscheduler.triggers.cron import CronTrigger
 import asyncio
 
 from api import scores, predictions, events, cron
+from config import get_settings
+
+# ============================================================
+# AKTIVNÍ PÁRY — pipeline se spustí pro každý
+# ============================================================
+def get_active_pairs() -> list[str]:
+    """Načte aktivní páry z configu (ACTIVE_PAIRS v .env, default EURUSD)."""
+    settings = get_settings()
+    raw = getattr(settings, "active_pairs", "EURUSD")
+    return [p.strip().upper() for p in raw.split(",") if p.strip()]
 
 
 # ============================================================
@@ -16,14 +26,18 @@ scheduler = AsyncIOScheduler(timezone="UTC")
 
 
 async def _scheduled_daily_update():
-    """Wrapper pro denní pipeline — zachytí chyby aby scheduler dál běžel."""
+    """Wrapper pro denní pipeline — spustí se pro všechny aktivní páry."""
     from scheduler.daily_update import run_daily_update
-    try:
-        logger.info("=== SCHEDULER: Spouštím denní pipeline ===")
-        await run_daily_update()
-        logger.info("=== SCHEDULER: Pipeline dokončena ✅ ===")
-    except Exception as e:
-        logger.error(f"=== SCHEDULER: Pipeline selhala ❌: {e} ===")
+    pairs = get_active_pairs()
+    logger.info(f"=== SCHEDULER: Spouštím denní pipeline pro páry: {pairs} ===")
+    for pair in pairs:
+        try:
+            logger.info(f"--- Pipeline: {pair} ---")
+            await run_daily_update(pair=pair)
+            logger.info(f"--- Pipeline: {pair} ✅ ---")
+        except Exception as e:
+            logger.error(f"--- Pipeline: {pair} ❌: {e} ---")
+    logger.info("=== SCHEDULER: Všechny páry dokončeny ===")
 
 
 @asynccontextmanager
