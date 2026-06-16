@@ -15,6 +15,10 @@ jobs:
 
       - name: Deploy application (Docker Compose)
         run: |
+          # Obnovení smazaného .env souboru z bezpečného umístění v domovské složce
+          mkdir -p ./backend
+          cp /home/cerny/clarus_backend.env ./backend/.env
+          
           # Vytvoření souboru .env.ngrok pro předání secrets do Docker Compose
           echo "NGROK_AUTHTOKEN=${{ secrets.NGROK_AUTHTOKEN }}" > .env.ngrok
           echo "NGROK_DOMAIN=${{ secrets.NGROK_DOMAIN }}" >> .env.ngrok
