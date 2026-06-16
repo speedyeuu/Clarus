@@ -7,6 +7,9 @@ export default async function UpdatedAt({ pair }: { pair: string }) {
 
   try {
     const res = await fetch(`${API_BASE}/api/score/latest?pair=${pair}`, {
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+      },
       next: { revalidate: 300 }, // revalidate každých 5 min
     });
     if (!res.ok) return null;

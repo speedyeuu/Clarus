@@ -4,6 +4,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "ngrok-skip-browser-warning": "true",
+    },
     next: { revalidate: 60 }, // ISR: revalidate každých 60s
   });
   if (res.status === 404) return null as T;
