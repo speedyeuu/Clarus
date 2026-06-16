@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -12,9 +12,6 @@ export default function InfoTooltip({ label, text }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
 
   const handleEnter = () => {
     if (btnRef.current) {
@@ -50,7 +47,7 @@ export default function InfoTooltip({ label, text }: Props) {
         i
       </button>
 
-      {mounted && open && createPortal(
+      {open && createPortal(
         <div style={{
           position: "absolute",
           top: `${pos.top}px`,

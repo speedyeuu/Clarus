@@ -2,11 +2,11 @@
  * Server komponent — fetchuje datum poslední aktualizace z backendu.
  * Zobrazuje se v hlavičce vedle EUR/USD.
  */
-export default async function UpdatedAt() {
+export default async function UpdatedAt({ pair }: { pair: string }) {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
   try {
-    const res = await fetch(`${API_BASE}/api/score/latest`, {
+    const res = await fetch(`${API_BASE}/api/score/latest?pair=${pair}`, {
       next: { revalidate: 300 }, // revalidate každých 5 min
     });
     if (!res.ok) return null;

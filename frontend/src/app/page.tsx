@@ -109,7 +109,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             animation: "pulse-glow 2s infinite",
             flexShrink: 0,
           }} />
-          <UpdatedAt />
+          <UpdatedAt pair={pair} />
         </div>
       </div>
 

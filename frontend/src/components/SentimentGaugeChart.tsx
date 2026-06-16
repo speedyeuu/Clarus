@@ -21,37 +21,37 @@ interface Props {
 export default function SentimentGaugeChart({ title, history, dataKey, tooltip }: Props) {
   const raw = history.length > 0
     ? (typeof history[history.length - 1][dataKey] === "number"
-        ? (history[history.length - 1][dataKey] as number)
-        : 0)
+      ? (history[history.length - 1][dataKey] as number)
+      : 0)
     : 0;
 
   const value = Math.max(-10, Math.min(10, raw));
 
   // ── Barvy ────────────────────────────────────────────────────────────────
   const color =
-    value >= 1 ? "var(--bullish)"
-    : value <= -1 ? "var(--bearish)"
-    : "var(--neutral)";
+    value > 1.0 ? "var(--bullish)"
+      : value < -1.0 ? "var(--bearish)"
+        : "var(--neutral)";
 
   const dimColor =
-    value >= 1 ? "rgba(34, 211, 160, 0.15)"
-    : value <= -1 ? "rgba(244, 63, 94, 0.15)"
-    : "rgba(107, 114, 128, 0.15)";
+    value > 1.0 ? "rgba(34, 211, 160, 0.15)"
+      : value < -1.0 ? "rgba(244, 63, 94, 0.15)"
+        : "rgba(107, 114, 128, 0.15)";
 
   const glowColor =
-    value >= 1 ? "rgba(34, 211, 160, 0.35)"
-    : value <= -1 ? "rgba(244, 63, 94, 0.35)"
-    : "rgba(107, 114, 128, 0.2)";
+    value > 1.0 ? "rgba(34, 211, 160, 0.35)"
+      : value < -1.0 ? "rgba(244, 63, 94, 0.35)"
+        : "rgba(107, 114, 128, 0.2)";
 
   // ── Popis hodnoty ─────────────────────────────────────────────────────────
   const labelText =
     value >= 7 ? "Strong Bull"
-    : value >= 3 ? "Bullish"
-    : value >= 1 ? "Mild Bull"
-    : value > -1 ? "Neutral"
-    : value > -3 ? "Mild Bear"
-    : value > -7 ? "Bearish"
-    : "Strong Bear";
+      : value >= 3 ? "Bullish"
+        : value >= 1 ? "Mild Bull"
+          : value > -1 ? "Neutral"
+            : value > -3 ? "Mild Bear"
+              : value > -7 ? "Bearish"
+                : "Strong Bear";
 
   // ── SVG geometrie ─────────────────────────────────────────────────────────
   const W = 220;
@@ -80,18 +80,18 @@ export default function SentimentGaugeChart({ title, history, dataKey, tooltip }
   // sweep-flag: 1 = po směru hodinových ručiček (pro kladné), 0 = opačně (záporné)
   const sweep = value >= 0 ? 1 : 0;
 
-  const hasArc = Math.abs(value) > 0.1;
+  const hasArc = Math.abs(value) > 0.03;
   const arcPath = hasArc
     ? `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} ${sweep} ${e.x.toFixed(2)} ${e.y.toFixed(2)}`
     : null;
 
   // ── Dílky stupnice ────────────────────────────────────────────────────────
   const ticks = [
-    { v: -10,  size: 10, w: 1.5 },
-    { v: -5,   size: 6,  w: 1 },
-    { v: 0,    size: 10, w: 1.5 },
-    { v: 5,    size: 6,  w: 1 },
-    { v: 10,   size: 10, w: 1.5 },
+    { v: -10, size: 10, w: 1.5, labelOffset: -18, label: "−10" },
+    { v: -5, size: 6, w: 1, labelOffset: 0, label: null },
+    { v: 0, size: 10, w: 1.5, labelOffset: -18, label: "0" },
+    { v: 5, size: 6, w: 1, labelOffset: 0, label: null },
+    { v: 10, size: 10, w: 1.5, labelOffset: -18, label: "+10" },
   ];
 
   // ── Zónové pozadí (polokruhy) ─────────────────────────────────────────────
@@ -126,7 +126,7 @@ export default function SentimentGaugeChart({ title, history, dataKey, tooltip }
           color, background: dimColor,
           padding: "3px 8px", borderRadius: "4px",
         }}>
-          {value > 0 ? "+" : ""}{value.toFixed(0)}
+          {value > 0 ? "+" : ""}{value.toFixed(2)}
         </div>
       </div>
 
@@ -192,7 +192,7 @@ export default function SentimentGaugeChart({ title, history, dataKey, tooltip }
         )}
 
         {/* Dílky stupnice */}
-        {ticks.map(({ v, w }) => {
+        {ticks.map(({ v, size, w }) => {
           const a = startAngle + (v / 10) * Math.PI;
           const inner = pt(a, r - sw / 2 - 2);
           const outer = pt(a, r + sw / 2 + 2);
@@ -249,7 +249,7 @@ export default function SentimentGaugeChart({ title, history, dataKey, tooltip }
           fontWeight="700"
           fontFamily="'JetBrains Mono', monospace"
         >
-          {value > 0 ? "+" : ""}{value.toFixed(0)}
+          {value > 0 ? "+" : ""}{value.toFixed(1)}
         </text>
         <text
           x={cx} y={cy + 14}

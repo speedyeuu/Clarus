@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clarus-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    # Nepotřebujeme porty ven, Ngrok se napojí vnitřní sítí na port 8000
+    expose:
+      - "8000"
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: clarus-ngrok
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command:
+      - "http"
+      - "--url=${NGROK_DOMAIN}"
+      - "backend:8000"

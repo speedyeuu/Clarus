@@ -105,7 +105,7 @@ export default function ScoreOverview({ score }: Props) {
           padding: "3px 8px", borderRadius: "5px",
           background: "var(--bg-elevated)",
         }}>
-          EUR/USD
+          {score.pair ? `${score.pair.slice(0, 3)}/${score.pair.slice(3)}` : "EUR/USD"}
         </div>
       </div>
 
@@ -115,7 +115,7 @@ export default function ScoreOverview({ score }: Props) {
           <IndicatorRow
             key={key}
             scoreKey={key}
-            value={(score as any)[key]}
+            value={(score as unknown as Record<string, number | null>)[key] ?? null}
             weight={weights[INDICATOR_META[key].weight_key] ?? 0}
           />
         ))}

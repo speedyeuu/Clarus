@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { DailyScore, Prediction, AccuracySummary, getScoreColor, INDICATOR_META } from "@/lib/types";
+import { useRef, useState } from "react";
+import { DailyScore, Prediction, AccuracySummary, INDICATOR_META } from "@/lib/types";
 
 interface ChartPoint {
   date: string;
@@ -83,7 +83,6 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
 
   // Build SVG paths
   const histLen = historyPoints.length;
-  const predLen = filteredPredictionPoints.length;
   const total = allPoints.length;
 
   const histPath = historyPoints.map((p, i) =>
@@ -103,8 +102,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
   ).join(" ");
   const bandPath = `${bandTop} ${bandBot} Z`;
 
-  // Zero line y
-  const zeroY = yScale(0);
+  // Gradient fill area
 
   // Last point for glow dot (already defined above as lastHistPoint)
   const lastHistX = lastHistPoint ? xScale(0, 0, lastHistPoint.date) : PAD.left;
@@ -129,13 +127,13 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
       headers,
       ...history.map((d) => {
         const [year, month, day] = d.date.split("-");
-        const rowData: any[] = [`${day}.${month}.${year}`, d.total_score];
-        
+        const rowData: (string | number)[] = [`${day}.${month}.${year}`, d.total_score];
+
         indicators.forEach(k => {
-          const val = (d as any)[k];
+          const val = (d as unknown as Record<string, number | null | undefined>)[k];
           rowData.push(val !== undefined && val !== null ? val : "N/A");
         });
-        
+
         return rowData;
       }),
     ];
@@ -259,7 +257,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
         {/* Legend */}
         <div style={{ display: "flex", gap: "20px", marginBottom: "12px", fontSize: "11px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div style={{ width: "20px", height: "2px", background: "var(--prediction)", borderRadius: "1px" }} />
+            <div style={{ width: "20px", height: "2px", background: "var(--text-secondary)", borderRadius: "1px" }} />
             <span style={{ color: "var(--text-secondary)" }}>Historické skóre</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -318,7 +316,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
             {/* History area fill */}
             {historyPoints.length > 1 && (
               <path
-                d={`${histPath} L ${xScale(0, 0, historyPoints[histLen-1].date)} ${H - PAD.bottom} L ${xScale(0, 0, historyPoints[0].date)} ${H - PAD.bottom} Z`}
+                d={`${histPath} L ${xScale(0, 0, historyPoints[histLen - 1].date)} ${H - PAD.bottom} L ${xScale(0, 0, historyPoints[0].date)} ${H - PAD.bottom} Z`}
                 fill="url(#histGrad)"
               />
             )}
@@ -374,7 +372,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
             ))}
 
             {/* X-axis dates — každý den, popisky pootočené pro 1M view */}
-            {allPoints.map((p, i) => {
+            {allPoints.map((p) => {
               const x = xScale(0, 0, p.date);
               const label = new Date(p.date).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
               // V 1M view pootočíme o -45° aby se nepřekrývaly

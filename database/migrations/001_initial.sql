@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS indicator_readings (
   previous      FLOAT,
   surprise      FLOAT,               -- actual - forecast
   surprise_zscore FLOAT,             -- normalizovaný surprise
-  raw_score     FLOAT,               -- -3.0 až +3.0 (float, bez zaokrouhlování)
+  raw_score     FLOAT,               -- -10.0 až +10.0 (float, bez zaokrouhlování)
   direction     TEXT,                -- 'USD_BULLISH' | 'EUR_BULLISH' | 'NEUTRAL'
   source        TEXT,                -- 'forex_factory' | 'cftc' | 'oanda' | 'manual'
   created_at    TIMESTAMPTZ DEFAULT NOW()
@@ -36,10 +36,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_indicator_date            ON indicator_read
 -- ============================================================
 CREATE TABLE IF NOT EXISTS daily_scores (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  date          DATE NOT NULL UNIQUE,
+  date          DATE NOT NULL,
   pair          TEXT NOT NULL DEFAULT 'EURUSD',
 
-  -- Skóre jednotlivých indikátorů (float -3 až +3, poslední dostupná hodnota)
+  -- Skóre jednotlivých indikátorů (float -10 až +10, poslední dostupná hodnota)
   score_interest_rates   FLOAT,
   score_inflation        FLOAT,
   score_gdp              FLOAT,
@@ -56,10 +56,11 @@ CREATE TABLE IF NOT EXISTS daily_scores (
   weights       JSONB,
 
   -- Výsledné skóre
-  total_score   FLOAT,               -- vážený součet, float v [-3, +3]
+  total_score   FLOAT,               -- vážený součet, float v [-10, +10]
   label         TEXT,                -- 'Strong Bullish' | 'Bullish' | ... | 'Strong Bearish'
 
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(date, pair)
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_scores_date ON daily_scores(date DESC);

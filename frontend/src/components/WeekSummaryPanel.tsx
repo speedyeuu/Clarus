@@ -161,7 +161,7 @@ export default function WeekSummaryPanel({ summary }: Props) {
           <h3 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
             Týdenní výhled
           </h3>
-          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Scénářová analýza · EUR/USD</span>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Scénářová analýza · {summary.pair ? `${summary.pair.slice(0, 3)}/${summary.pair.slice(3)}` : "EUR/USD"}</span>
         </div>
         <span style={{
           fontSize: "12px",

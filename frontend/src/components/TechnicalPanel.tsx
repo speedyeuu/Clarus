@@ -48,7 +48,7 @@ function RsiGauge({ rsi }: { rsi: number }) {
   );
 }
 
-function EmaRow({ label, pct, positive }: { label: string; pct: number; positive: boolean }) {
+function EmaRow({ label, pct }: { label: string; pct: number }) {
   const color = pct > 0 ? "var(--bullish)" : "var(--bearish)";
   const arrow = pct > 0 ? "▲" : "▼";
   return (
@@ -131,7 +131,7 @@ export default function TechnicalPanel({ data }: Props) {
           Technická analýza
         </h3>
         <span style={{ fontSize: "11px", color: "var(--text-muted)", background: "var(--bg-tertiary)", padding: "2px 8px", borderRadius: "6px" }}>
-          D1 · EUR/USD
+          D1 · {data.pair ? `${data.pair.slice(0, 3)}/${data.pair.slice(3)}` : "EUR/USD"}
         </span>
       </div>
 
@@ -147,9 +147,9 @@ export default function TechnicalPanel({ data }: Props) {
           Vzdálenost od EMA
         </span>
         <div style={{ marginTop: "6px" }}>
-          <EmaRow label="Cena vs EMA 20" pct={data.dist_from_ema20_pct} positive={data.dist_from_ema20_pct > 0} />
-          <EmaRow label="Cena vs EMA 50" pct={data.dist_from_ema50_pct} positive={data.dist_from_ema50_pct > 0} />
-          <EmaRow label="EMA 20 vs EMA 50" pct={data.ema_cross_pct} positive={data.ema20_above_ema50} />
+          <EmaRow label="Cena vs EMA 20" pct={data.dist_from_ema20_pct} />
+          <EmaRow label="Cena vs EMA 50" pct={data.dist_from_ema50_pct} />
+          <EmaRow label="EMA 20 vs EMA 50" pct={data.ema_cross_pct} />
         </div>
       </div>
 

@@ -1,19 +1,15 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 // Aktivní páry — přidat nový pár = přidat sem + do backendu ACTIVE_PAIRS
 const PAIRS = [
-  { id: "XAUUSD", label: "XAU/USD", flag: "🪙" },
   { id: "EURUSD", label: "EUR/USD", flag: "🇪🇺" },
   { id: "GBPUSD", label: "GBP/USD", flag: "🇬🇧" },
   { id: "USDJPY", label: "USD/JPY", flag: "🇯🇵" },
-  { id: "AUDUSD", label: "AUD/USD", flag: "🇦🇺" },
-  { id: "EURGBP", label: "EUR/GBP", flag: "🇬🇧" },
-  { id: "EURCHF", label: "EUR/CHF", flag: "🇨🇭" },
-  { id: "EURCAD", label: "EUR/CAD", flag: "🇨🇦" },
   { id: "EURNZD", label: "EUR/NZD", flag: "🇳🇿" },
   { id: "EURJPY", label: "EUR/JPY", flag: "🇯🇵" },
+  { id: "XAUUSD", label: "XAU/USD", flag: "🪙" },
 ];
 
 interface Props {

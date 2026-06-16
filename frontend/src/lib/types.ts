@@ -36,7 +36,7 @@ export interface UpcomingEvent {
   event_date: string;
   event_time: string;
   title: string;
-  country: 'USD' | 'EUR';
+  country: string;
   impact: 'High' | 'Medium' | 'Low';
   indicator_key: string;
   forecast: string | null;
@@ -108,20 +108,20 @@ export const INDICATOR_META: Record<string, { label: string; weight_key: string;
 // =============================================
 export function getScoreLabel(score: number): string {
   if (score >= 7)  return "Strong Bullish";
-  if (score >= 4)  return "Bullish";
+  if (score >= 3)  return "Bullish";
   if (score >= 1)  return "Mildly Bullish";
   if (score > -1)  return "Neutral";
-  if (score > -4)  return "Mildly Bearish";
+  if (score > -3)  return "Mildly Bearish";
   if (score > -7)  return "Bearish";
   return "Strong Bearish";
 }
 
 export function getScoreColor(score: number | null): string {
   if (score === null) return "var(--neutral)";
-  if (score >= 4)  return "var(--bullish)";
+  if (score >= 3)  return "var(--bullish)";
   if (score >= 1)  return "var(--mild-bullish)";
   if (score > -1)  return "var(--neutral)";
-  if (score > -4)  return "var(--mild-bearish)";
+  if (score > -3)  return "var(--mild-bearish)";
   return "var(--bearish)";
 }
 

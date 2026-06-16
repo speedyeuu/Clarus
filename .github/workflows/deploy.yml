@@ -1,0 +1,23 @@
+name: Deploy to Local Ubuntu Server via Ngrok
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted # Spustí se přímo na vašem Ubuntu serveru
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy application (Docker Compose)
+        run: |
+          # Vytvoření souboru .env.ngrok pro předání secrets do Docker Compose
+          echo "NGROK_AUTHTOKEN=${{ secrets.NGROK_AUTHTOKEN }}" > .env.ngrok
+          echo "NGROK_DOMAIN=${{ secrets.NGROK_DOMAIN }}" >> .env.ngrok
+          
+          # Zastavení starých kontejnerů, sestavení a spuštění nových
+          docker compose --env-file .env.ngrok up -d --build
