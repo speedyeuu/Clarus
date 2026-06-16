@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         id="daily_update",
         replace_existing=True,
         misfire_grace_time=600,   # toleruje 10 min zpoždění (server sleep na free tier)
+        max_instances=1,          # blokuje paralelní běh, pokud předchozí pipeline ještě neskončila
     )
     scheduler.start()
     next_run = scheduler.get_job("daily_update").next_run_time
@@ -61,12 +62,23 @@ async def lifespan(app: FastAPI):
     logger.info("Server stopped")
 
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
 app = FastAPI(
     title="Clarus API",
     description="Backend pro Clarus – fundamentální scoring EUR/USD páru",
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

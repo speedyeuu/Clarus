@@ -59,7 +59,7 @@ async def get_technical_analysis(pair: str = "EURUSD"):
     db = get_supabase()
 
     # Stáhneme OHLC data (60 dní stačí pro EMA50 + RSI14)
-    df = await fetch_historical_ohlc(days=60)
+    df = await fetch_historical_ohlc(days=60, pair=pair)
     if df is None or len(df) < 20:
         raise HTTPException(status_code=503, detail="Cennová data nejsou dostupná.")
 

@@ -24,8 +24,11 @@ async def fetch_retail_sentiment(pair: str = "EURUSD") -> Optional[SentimentData
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             # Krok A: Přihlášení (Vytvoření jednorázové Session)
-            login_url = f"https://www.myfxbook.com/api/login.json?email={settings.myfxbook_email}&password={settings.myfxbook_password}"
-            r_login = await client.get(login_url)
+            login_url = "https://www.myfxbook.com/api/login.json"
+            r_login = await client.get(login_url, params={
+                "email": settings.myfxbook_email,
+                "password": settings.myfxbook_password
+            })
             login_data = r_login.json()
             
             if login_data.get("error", False) == True:

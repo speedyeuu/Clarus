@@ -156,16 +156,17 @@ async def get_week_summary(pair: str = "EURUSD"):
     score_change = end_score - current_score
 
     # Direction label
+    pair_label = f"{pair[:3]}/{pair[3:]}"
     if end_score > 3.0:
-        direction_label = "📈 Bullish EUR/USD"
+        direction_label = f"📈 Bullish {pair_label}"
     elif end_score > 1.0:
-        direction_label = "🟢 Mírně Bullish EUR/USD"
+        direction_label = f"🟢 Mírně Bullish {pair_label}"
     elif end_score > -1.0:
-        direction_label = "⚪ Neutrální EUR/USD"
+        direction_label = f"⚪ Neutrální {pair_label}"
     elif end_score > -3.0:
-        direction_label = "🟡 Mírně Bearish EUR/USD"
+        direction_label = f"🟡 Mírně Bearish {pair_label}"
     else:
-        direction_label = "📉 Bearish EUR/USD"
+        direction_label = f"📉 Bearish {pair_label}"
 
     # Dny se scénáři (beat vs miss)
     scenario_days = []

@@ -20,6 +20,7 @@ from scheduler.update_normalization_stats import update_normalization_stats
 from scoring.indicators import score_ff_event, score_sentiment, score_trend, score_seasonality
 from scoring.cot_combined import score_cot_combined
 from scoring.engine import calculate_total_score
+from scoring.mappings import SPECIFIC_TO_GENERIC
 
 # ============================================================
 # CARRY-FORWARD KONFIGURACE
@@ -215,7 +216,8 @@ async def run_daily_update(pair: str = "EURUSD"):
         "JPY": "boj_rate",
         "USD": "fed_rate",
         "AUD": "rba_rate",
-        "NZD": "rbnz_rate"
+        "NZD": "rbnz_rate",
+        "XAU": "xau_rate"
     }
     base_rate_key = RATE_KEYS.get(pair[:3], "ecb_rate")
     quote_rate_key = RATE_KEYS.get(pair[3:], "fed_rate")
@@ -223,58 +225,18 @@ async def run_daily_update(pair: str = "EURUSD"):
     try:
         res_quote = db.table("indicator_readings").select("actual").eq("indicator_name", quote_rate_key).eq("pair", pair).order("date", desc=True).limit(1).execute()
         res_base = db.table("indicator_readings").select("actual").eq("indicator_name", base_rate_key).eq("pair", pair).order("date", desc=True).limit(1).execute()
+        
         latest_quote = res_quote.data[0]["actual"] if res_quote.data else 5.25
-        latest_base = res_base.data[0]["actual"] if res_base.data else 4.25
+        
+        if base_rate_key == "xau_rate":
+            latest_base = 0.0
+        else:
+            latest_base = res_base.data[0]["actual"] if res_base.data else 4.25
     except Exception as e:
         logger.warning(f"Nepodařilo se načíst baseline úrokové sazby z DB: {e}")
         latest_quote = 5.25
-        latest_base = 4.25
+        latest_base = 0.0 if base_rate_key == "xau_rate" else 4.25
 
-    SPECIFIC_TO_GENERIC = {
-        "cpi_us":           "inflation",
-        "cpi_eu":           "inflation",
-        "cpi_uk":           "inflation",
-        "cpi_jpy":          "inflation",
-        "cpi_nzd":          "inflation",
-        "pce_us":           "inflation",
-        "pce_eu":           "inflation",
-        "pce_uk":           "inflation",
-        "pce_jpy":          "inflation",
-        "pce_nzd":          "inflation",
-        "nfp_us":           "labor",
-        "nfp_eu":           "labor",
-        "nfp_uk":           "labor",
-        "nfp_jpy":          "labor",
-        "nfp_nzd":          "labor",
-        "unemployment_us":  "labor",
-        "unemployment_eu":  "labor",
-        "unemployment_uk":  "labor",
-        "unemployment_jpy": "labor",
-        "unemployment_nzd": "labor",
-        "gdp_flash_us":     "gdp",
-        "gdp_flash_eu":     "gdp",
-        "gdp_flash_uk":     "gdp",
-        "gdp_flash_jpy":    "gdp",
-        "gdp_flash_nzd":    "gdp",
-        "mpmi_us":          "mpmi",
-        "mpmi_eu":          "mpmi",
-        "mpmi_uk":          "mpmi",
-        "mpmi_jpy":         "mpmi",
-        "mpmi_nzd":         "mpmi",
-        "spmi_us":          "spmi",
-        "spmi_eu":          "spmi",
-        "spmi_uk":          "spmi",
-        "spmi_jpy":         "spmi",
-        "spmi_nzd":         "spmi",
-        "retail_sales_us":  "retail_sales",
-        "retail_sales_eu":  "retail_sales",
-        "retail_sales_uk":  "retail_sales",
-        # Rate decisions musí aktualizovat interest_rates score
-        "fed_rate":         "interest_rates",
-        "ecb_rate":         "interest_rates",
-        "boe_rate":         "interest_rates",
-        "boc_rate":         "interest_rates",
-    }
 
     for ev in ff_today:
         if not ev.indicator_key or not ev.actual or not ev.forecast:
@@ -358,10 +320,10 @@ async def run_daily_update(pair: str = "EURUSD"):
     bond_histories = await fetch_2y_yield_histories(lookback_days=90, pair=pair)
 
     if bond_histories:
-        us_hist, de_hist = bond_histories
+        quote_hist, base_hist = bond_histories
         combined_ir, bond_score, policy_score, ir_log = score_combined_interest_rates(
-            quote_2y_history=us_hist, 
-            base_2y_history=de_hist, 
+            quote_2y_history=quote_hist, 
+            base_2y_history=base_hist, 
             quote_rate=latest_quote, 
             base_rate=latest_base,
             pair=pair

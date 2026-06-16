@@ -128,19 +128,19 @@ def score_sentiment(long_pct: float, short_pct: float) -> float:
     
     Předpokládáme že "neutrální" stav je cca 50/50.
     Rozptyl typicky lítá 30 % - 70 %.
+
+    Vstup: long_pct a short_pct jsou vždy podíly 0.0–1.0
+    (collector je zodpovědný za normalizaci).
     """
     if long_pct is None or short_pct is None:
         return 0.0
 
-    # MyFXBook vrací hodnoty jako desetinná čísla (např. 0.60 a 0.40) nebo procenta (60 a 40).
-    # Rozdíl chceme převést na škálu -10 až +10.
-    # Extrémní retail long sentiment (+60 delta) by měl dát -10.
-    # Pokud je delta v desetinném formátu (<= 1.0), vynásobíme ji 100, abychom pracovali s procenty.
-    delta = long_pct - short_pct
-    if abs(delta) <= 1.0:
-        delta = delta * 100.0
+    # Collector (sentiment.py) VŽDY posílá podíl 0.0–1.0 (např. 0.60 a 0.40).
+    # Převedeme na procentuální delta: 0.60 - 0.40 = 0.20 → 20 procentních bodů.
+    delta_pct = (long_pct - short_pct) * 100.0
     
-    score = delta / -6.0
+    # Škálování: ±60 pctbodů delta → ±10 skóre (kontraindikátor → záporné znaménko)
+    score = delta_pct / -6.0
     return float(max(-10.0, min(10.0, score)))
 
 

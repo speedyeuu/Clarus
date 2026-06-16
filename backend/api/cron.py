@@ -39,8 +39,8 @@ async def trigger_daily_update(
         else authorization
     )
 
-    if token != settings.cron_secret:
-        logger.warning("Cron zablokován — neplatný klíč.")
+    if not settings.cron_secret or token != settings.cron_secret:
+        logger.warning("Cron zablokován — neplatný nebo chybějící klíč (CRON_SECRET).")
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # Pokud je specifikován konkrétní pár, spustíme jen pro něj; jinak všechny aktivní

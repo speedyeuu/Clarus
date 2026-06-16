@@ -58,6 +58,7 @@ async def fetch_cot_data(pair: str = "EURUSD") -> Optional[COTData]:
         "JPY": "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE",
         "AUD": "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
         "NZD": "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+        "XAU": "GOLD - COMMODITY EXCHANGE INC.",
         "USD": "USD INDEX - ICE FUTURES U.S."
     }
 

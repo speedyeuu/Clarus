@@ -17,59 +17,7 @@ def calculate_confidence(events_count: int) -> float:
     return 0.30     # Mnoho zpráv = velká nejistota (může to dopadnout jakkoliv)
 
 
-# Mapování specifických klíčů z upcoming_events → generické klíče vah modelu.
-# upcoming_events ukládá klíče jako "cpi_us", "nfp_us" (specifické),
-# ale current_weights používá "inflation", "labor" (generické).
-# Bez tohoto mapování by weight byl vždy 0.0 a predikce by ignorovala všechny zprávy.
-SPECIFIC_TO_GENERIC = {
-    "cpi_us":           "inflation",
-    "cpi_eu":           "inflation",
-    "cpi_uk":           "inflation",
-    "cpi_jpy":          "inflation",
-    "cpi_nzd":          "inflation",
-    "pce_us":           "inflation",
-    "pce_eu":           "inflation",
-    "pce_uk":           "inflation",
-    "pce_jpy":          "inflation",
-    "pce_nzd":          "inflation",
-    "nfp_us":           "labor",
-    "nfp_eu":           "labor",
-    "nfp_uk":           "labor",
-    "nfp_jpy":          "labor",
-    "nfp_nzd":          "labor",
-    "unemployment_us":  "labor",
-    "unemployment_eu":  "labor",
-    "unemployment_uk":  "labor",
-    "unemployment_jpy": "labor",
-    "unemployment_nzd": "labor",
-    "gdp_flash_us":     "gdp",
-    "gdp_flash_eu":     "gdp",
-    "gdp_flash_uk":     "gdp",
-    "gdp_flash_jpy":    "gdp",
-    "gdp_flash_nzd":    "gdp",
-    "mpmi_us":          "mpmi",
-    "mpmi_eu":          "mpmi",
-    "mpmi_uk":          "mpmi",
-    "mpmi_jpy":         "mpmi",
-    "mpmi_nzd":         "mpmi",
-    "spmi_us":          "spmi",
-    "spmi_eu":          "spmi",
-    "spmi_uk":          "spmi",
-    "spmi_jpy":         "spmi",
-    "spmi_nzd":         "spmi",
-    "retail_sales_us":  "retail_sales",
-    "retail_sales_eu":  "retail_sales",
-    "retail_sales_uk":  "retail_sales",
-    "retail_sales_jpy": "retail_sales",
-    "retail_sales_nzd": "retail_sales",
-    "retail_sales_jp":  "retail_sales",
-    "fed_rate":         "interest_rates",
-    "ecb_rate":         "interest_rates",
-    "boe_rate":         "interest_rates",
-    "boc_rate":         "interest_rates",
-    "boj_rate":         "interest_rates",
-    "rbnz_rate":        "interest_rates",
-}
+from scoring.mappings import SPECIFIC_TO_GENERIC
 
 def map_probability_to_score_shift(probability: float, indicator_weight: float, invert: bool = False) -> float:
     """
@@ -204,6 +152,7 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
 
     base_curr = pair[:3]
     quote_curr = pair[3:]
+    cutoff = (today_date + timedelta(days=7)).isoformat()
     try:
         res = (
             db.table("upcoming_events")
@@ -353,9 +302,9 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
         event_uncertainty = len(day_events) * 0.5  # +0.5 za každý event
         band_width = float(min(4.0, base_band + event_uncertainty))
 
-        # Informace pro confidence
+        # Informace pro confidence — více událostí = VĚTŠÍ nejistota = NIŽŠÍ confidence
         n_ev = len(day_events)
-        confidence = 0.3 if n_ev == 0 else 0.5 if n_ev == 1 else 0.65 if n_ev == 2 else 0.75
+        confidence = calculate_confidence(n_ev)
 
         record = {
             "created_date": today_str,

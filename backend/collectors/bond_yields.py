@@ -16,8 +16,9 @@ from typing import Optional, Dict, Tuple
 from datetime import date, timedelta
 import pandas as pd
 from config import get_settings
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 async def _fetch_fred_history(series_id: str, lookback_days: int = 90) -> Dict[str, float]:
     """
     Stáhne historii hodnot z FRED (CSV endpoint) za posledních N dní.
@@ -132,20 +133,31 @@ async def fetch_2y_yield_histories(
 
     Vrací (us_2y_dict, base_2y_dict) kde klíče jsou 'YYYY-MM-DD' a hodnoty jsou procenta.
     """
-    logger.info(f"Stahuji US 2Y a Base 2Y výnosy pro {pair}...")
+    logger.info(f"Stahuji Quote 2Y a Base 2Y výnosy pro {pair}...")
 
     if pair == "EURNZD":
         logger.warning(f"Denní NZD dluhopisy nejsou přes FRED k dispozici. Použije se automaticky fallback na úrokové sazby centrálních bank.")
         return None
 
-    # --- Quote 2Y (US 2Y pro hlavní páry, primární zdroj: FRED DGS2) ---
-    us_hist = await _fetch_fred_history("DGS2", lookback_days)
-    if not us_hist:
-        logger.error("US 2Y výnosy nedostupné — bond spread scoring přeskočen.")
-        return None
-
-    # --- Base 2Y ---
-    base_hist = {}
+    # --- Quote 2Y ---
+    # Pro většinu párů je Quote = USD (EURUSD, GBPUSD).
+    # Pro USDJPY je Quote = JPY, ale používáme US 2Y jako proxy pro DXY.
+    if pair == "USDJPY":
+        # Pro USDJPY: USD je Base, JPY je Quote
+        # quote_hist = JP yields, base_hist = US yields
+        jp_hist = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
+        us_hist_for_base = await _fetch_fred_history("DGS2", lookback_days)
+        if not jp_hist or not us_hist_for_base:
+            logger.error("JP nebo US výnosy nedostupné — bond spread scoring přeskočen.")
+            return None
+        quote_hist = jp_hist
+        base_hist = us_hist_for_base
+    else:
+        # Pro ostatní páry: USD je Quote
+        quote_hist = await _fetch_fred_history("DGS2", lookback_days)
+        if not quote_hist:
+            logger.error("US 2Y výnosy nedostupné — bond spread scoring přeskočen.")
+            return None
     
     if pair == "EURUSD":
         # DE 2Y (primární zdroj: FRED IRDE2YD156N)
@@ -156,8 +168,8 @@ async def fetch_2y_yield_histories(
             logger.warning("DE 2Y z FRED nedostupné, zkouším ECB SDMX fallback...")
             de_val = await _fetch_de2y_ecb_fallback()
             if de_val is not None:
-                base_hist = {d: de_val for d in us_hist.keys()}
-                logger.info(f"DE 2Y ECB fallback: {de_val:.3f}% aplikováno na {len(base_hist)} dní US historie")
+                base_hist = {d: de_val for d in quote_hist.keys()}
+                logger.info(f"DE 2Y ECB fallback: {de_val:.3f}% aplikováno na {len(base_hist)} dní Quote historie")
             else:
                 logger.error("DE 2Y výnosy nedostupné ani z ECB — bond spread scoring přeskočen.")
                 return None
@@ -166,34 +178,42 @@ async def fetch_2y_yield_histories(
         if not base_hist:
             logger.error("UK 2Y výnosy nedostupné z EODHD — bond spread scoring přeskočen.")
             return None
-    elif pair == "USDJPY":
-        # Japan 10Y as proxy since 2Y isn't cleanly available for free in FRED
-        # 10Y is heavily targeted by BOJ Yield Curve Control (YCC) so it's a valid macro proxy
-        base_hist = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
-        if not base_hist:
-            logger.error("Japonské výnosy z FRED nedostupné — bond spread scoring přeskočen.")
+    elif pair == "EURJPY":
+        # EUR je Base, JPY je Quote — Quote hist už máme (stahujeme US 2Y jako proxy)
+        # Pro EURJPY: Base = EUR (DE 2Y), Quote = JPY
+        de_hist_eurjpy = await _fetch_fred_history("IRDE2YD156N", lookback_days)
+        jp_hist_eurjpy = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
+        if not de_hist_eurjpy or not jp_hist_eurjpy:
+            logger.error("DE nebo JP výnosy nedostupné — bond spread scoring přeskočen pro EURJPY.")
             return None
+        base_hist = de_hist_eurjpy
+        quote_hist = jp_hist_eurjpy
+    elif pair == "XAUUSD":
+        # Zlato (XAU) nenese žádný úrok (yield = 0.0%)
+        # Vracíme nulový výnos pro všechny dny, pro které máme USD historii
+        base_hist = {d: 0.0 for d in quote_hist.keys()}
+        logger.info(f"Aplikován nulový výnos (0.0%) pro zlato na {len(base_hist)} dní Quote historie.")
     else:
         logger.warning(f"Pro pár {pair} nejsou bond yields naimplementované. Používám empty spread.")
         return None
 
 
     # Zkontrolujeme dostatek překrývajících se dní pro Z-score
-    common = set(us_hist.keys()) & set(base_hist.keys())
+    common = set(quote_hist.keys()) & set(base_hist.keys())
     if len(common) < 5:
         logger.warning(
             f"Příliš málo společných dní pro bond yields ({len(common)}) — "
             f"Z-score normalizace nebude přesná."
         )
 
-    current_us = us_hist.get(max(us_hist.keys()))
+    current_quote = quote_hist.get(max(quote_hist.keys()))
     current_base = base_hist.get(max(base_hist.keys()))
-    spread = current_us - current_base if current_us and current_base else None
+    spread = current_quote - current_base if current_quote and current_base else None
 
     if spread is not None:
         logger.info(
-            f"Bond yields: US 2Y={current_us:.3f}%, Base 2Y={current_base:.3f}%, "
+            f"Bond yields: Quote 2Y={current_quote:.3f}%, Base 2Y={current_base:.3f}%, "
             f"spread={spread:.3f}% (n_common={len(common)})"
         )
 
-    return us_hist, base_hist
+    return quote_hist, base_hist
