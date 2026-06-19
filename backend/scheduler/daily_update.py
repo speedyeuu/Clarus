@@ -50,80 +50,109 @@ CARRY_FORWARD_CONFIG = {
 
 async def fetch_previous_scores(pair: str = "EURUSD") -> tuple[dict, dict]:
     """
-    Natáhne poslední platné skóre z tabulky daily_scores pro každý indikátor
-    a aplikuje carry-forward logiku.
-
-    Vrací tuple (scores, ages) kde:
-      - scores: dict {indicator: hodnota} po aplikaci carry-forward a decay
-      - ages: dict {indicator: age_days} — kolik dní stará je hodnota
-
-    Věk (age) se použije v engine.py pro freshness multiplier:
-      - age=0  → plná váha indikátoru (čerstvé čtení dnes)
-      - age=7  → snížená váha (zpráva před týdnem)
-      - age=30 → minimální váha (měsíc stará data)
+    Natáhne poslední platné skóre.
+    Pro makro indikátory (FF events) se dívá do indicator_readings pro ZJIŠTĚNÍ SKUTEČNÉHO VĚKU.
+    Pro kontinuální indikátory (COT, sentiment) se dívá do daily_scores jako fallback.
     """
     db = get_supabase()
     today = date.today()
 
-    # Stáhneme max 61 dní zpět (GDP carry je nejdelší = 60 dní)
-    cutoff = (today - timedelta(days=61)).isoformat()
+    scores = {}
+    ages: dict[str, int] = {}
 
-    try:
-        result = (
-            db.table("daily_scores")
-            .select(
-                "date, score_interest_rates, score_inflation, score_gdp, "
-                "score_labor, score_cot, score_spmi, score_mpmi, "
-                "score_retail_sales, score_retail_sentiment, score_seasonality"
+    # 1. Makro indikátory z indicator_readings
+    ff_categories = ["inflation", "gdp", "labor", "spmi", "mpmi", "retail_sales"]
+    
+    # Mapování generic -> specific keys
+    generic_to_specific = {}
+    for spec, gen in SPECIFIC_TO_GENERIC.items():
+        generic_to_specific.setdefault(gen, []).append(spec)
+
+    for generic_indicator in ff_categories:
+        config = CARRY_FORWARD_CONFIG[generic_indicator]
+        max_days = config["max_days"]
+        specific_keys = generic_to_specific.get(generic_indicator, [])
+        
+        if not specific_keys:
+            continue
+            
+        cutoff = (today - timedelta(days=max_days)).isoformat()
+        
+        try:
+            # Najdeme všechny záznamy pro tento pár a tyto indikátory od cutoff data
+            res = (
+                db.table("indicator_readings")
+                .select("date, raw_score")
+                .eq("pair", pair)
+                .in_("indicator_name", specific_keys)
+                .gte("date", cutoff)
+                .order("date", desc=True)
+                .execute()
             )
+            
+            if res.data:
+                # Najdeme nejnovější datum události z těchto dat
+                latest_date_str = res.data[0]["date"]
+                latest_date = date.fromisoformat(latest_date_str)
+                age_days = (today - latest_date).days
+                
+                # Zprůměrujeme raw_score všech událostí, které se staly v tento nejnovější den
+                # (protože v jeden den může vyjít vícero reportů pro stejnou kategorii, např. NFP a Unemployment)
+                scores_on_latest_date = [r["raw_score"] for r in res.data if r["date"] == latest_date_str]
+                if scores_on_latest_date:
+                    avg_raw_score = sum(scores_on_latest_date) / len(scores_on_latest_date)
+                    
+                    # Aplikace lineárního decay od skutečného data události
+                    decay_factor = max(0.0, 1.0 - (age_days / max_days))
+                    carried = avg_raw_score * decay_factor
+                    
+                    scores[generic_indicator] = carried
+                    ages[generic_indicator] = age_days
+                    logger.info(f"Carry-forward [{generic_indicator}]: raw={avg_raw_score:.4f} × {decay_factor:.4f} (age {age_days}d) = {carried:.4f}")
+        except Exception as e:
+            logger.warning(f"Chyba při čtení indicator_readings pro {generic_indicator}: {e}")
+
+    # 2. Kontinuální indikátory (fallback z daily_scores)
+    continuous_categories = ["interest_rates", "cot", "retail_sentiment", "seasonality"]
+    cutoff_daily = (today - timedelta(days=45)).isoformat()
+    try:
+        res_daily = (
+            db.table("daily_scores")
+            .select("date, score_interest_rates, score_cot, score_retail_sentiment, score_seasonality")
             .eq("pair", pair)
-            .gte("date", cutoff)
+            .gte("date", cutoff_daily)
             .order("date", desc=True)
             .execute()
         )
+        if res_daily.data:
+            for generic_indicator in continuous_categories:
+                col_name = f"score_{generic_indicator}"
+                config = CARRY_FORWARD_CONFIG[generic_indicator]
+                max_days = config["max_days"]
+                use_decay = config["decay"]
+                
+                for row in res_daily.data:
+                    val = row.get(col_name)
+                    if val is None:
+                        continue
+                        
+                    row_date = date.fromisoformat(row["date"])
+                    age_days = (today - row_date).days
+                    
+                    if age_days > max_days:
+                        break
+                        
+                    if use_decay:
+                        decay_factor = max(0.0, 1.0 - (age_days / max_days))
+                        carried = val * decay_factor
+                    else:
+                        carried = val
+                        
+                    scores[generic_indicator] = carried
+                    ages[generic_indicator] = age_days
+                    break
     except Exception as e:
-        logger.warning(f"Nepodařilo se načíst carry-forward skóre: {e}")
-        return {}, {}
-
-    if not result.data:
-        logger.info("Žádná historická data pro carry-forward — začínám od nuly.")
-        return {}, {}
-
-    scores = {}
-    ages: dict[str, int] = {}  # věk každého indikátoru ve dnech
-
-    for indicator, config in CARRY_FORWARD_CONFIG.items():
-        col_name = f"score_{indicator}"
-        max_days = config["max_days"]
-        use_decay = config["decay"]
-
-        # Procházíme záznamy od nejčerstvějšího; hledáme první nenulový
-        for row in result.data:
-            val = row.get(col_name)
-            if val is None:
-                continue  # Tento den neměl data, zkusíme starší
-
-            row_date = date.fromisoformat(row["date"])
-            age_days = (today - row_date).days
-
-            if age_days > max_days:
-                # Data jsou příliš stará → nepoužijeme, zůstane 0.0
-                logger.debug(f"Carry-forward [{indicator}]: data stará {age_days}d > limit {max_days}d → skipped")
-                break
-
-            if use_decay:
-                # Lineární decay: plná hodnota v den 0, nula v den max_days
-                decay_factor = max(0.0, 1.0 - (age_days / max_days))
-                carried = val * decay_factor
-                logger.info(f"Carry-forward [{indicator}]: {val:.4f} × {decay_factor:.4f} (age {age_days}d) = {carried:.4f}")
-            else:
-                # Flat: plná hodnota po celou dobu
-                carried = val
-                logger.info(f"Carry-forward [{indicator}]: {val:.2f} flat (age {age_days}d / max {max_days}d)")
-
-            scores[indicator] = carried
-            ages[indicator] = age_days
-            break
+        logger.warning(f"Chyba při čtení daily_scores pro kontinuální fallback: {e}")
 
     return scores, ages
 
