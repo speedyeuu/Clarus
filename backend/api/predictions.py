@@ -150,6 +150,20 @@ async def get_week_summary(pair: str = "EURUSD"):
     current_score = latest_score_res.data[0]["total_score"] if latest_score_res.data else 0.0
     current_label = latest_score_res.data[0]["label"] if latest_score_res.data else "Neutral"
 
+    # Pokud nejsou žádné predikce, vrátíme prázdný summary místo IndexError
+    if not preds:
+        return {
+            "pair": pair,
+            "current_score": current_score,
+            "current_label": current_label,
+            "direction_label": f"⚪ Čekám na data",
+            "score_end_expected": current_score,
+            "score_change": 0.0,
+            "change_description": "žádné události",
+            "scenario_days": [],
+            "total_prediction_days": 0
+        }
+
     # Konec týdne
     end_pred = preds[-1]
     end_score = end_pred["predicted_score_mid"]

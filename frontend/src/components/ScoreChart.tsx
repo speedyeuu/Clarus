@@ -210,7 +210,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
             <span style={{ fontFamily: "monospace", fontSize: "13px", fontWeight: 600, color: changeColor }}>
               {change24h > 0 ? "+" : ""}{change24h.toFixed(2)}
             </span>
-            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>24h</span>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>1d</span>
           </div>
 
           {/* Time range buttons */}
@@ -323,7 +323,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
 
             {/* History line */}
             {historyPoints.length > 1 && (
-              <path d={histPath} fill="none" stroke="var(--prediction)" strokeWidth="2" strokeLinecap="round" />
+              <path d={histPath} fill="none" stroke="var(--text-primary)" strokeWidth="2" strokeLinecap="round" />
             )}
 
             {/* Prediction line (dashed) */}

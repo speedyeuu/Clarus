@@ -85,18 +85,17 @@ TITLE_TO_INDICATOR = {
     "Retail Sales y/y":              "retail_sales",
 
     # ── INTEREST RATES / CB ──────────────────────────────────────────────
+    # Plně specifické názvy CB → přímý rate klíč
     "Federal Funds Rate":            "fed_rate",
     "Main Refinancing Rate":         "ecb_rate",
     "Deposit Facility Rate":         "ecb_rate",
-    "Monetary Policy Statement":     "fed_rate",  # speech/statement
     "FOMC Statement":                "fed_rate",
-    "Rate Statement":                "fed_rate",
-    "ECB Press Conference":          "ecb_rate",
     "FOMC Press Conference":         "fed_rate",
     "FOMC Meeting Minutes":          "fed_rate",
+    "ECB Press Conference":          "ecb_rate",
     "ECB Meeting Accounts":          "ecb_rate",
-    "Fed Chair":                     "fed_rate",
     "ECB President":                 "ecb_rate",
+    "Fed Chair":                     "fed_rate",
     "Official Bank Rate":            "boe_rate",
     "BOE Monetary Policy Report":    "boe_rate",
     "MPC Official Bank Rate Votes":  "boe_rate",
@@ -108,8 +107,30 @@ TITLE_TO_INDICATOR = {
     "RBNZ Rate Statement":           "rbnz_rate",
     "RBNZ Gov":                      "rbnz_rate",
     "RBNZ Press Conference":         "rbnz_rate",
+    # Generické názvy → "rate_decision" sentinel; country určí správný rate klíč dynamicky
+    # Takové názvy používá např. BoC, RBA a další CB které nemáme explicitně pojmenované
+    "Monetary Policy Statement":     "rate_decision",
+    "Rate Statement":                "rate_decision",
+    "Interest Rate Decision":        "rate_decision",
+    "Monetary Policy Summary":       "rate_decision",
 }
 
+# Mapování country kódu na příslušný rate klíč (CB dané země)
+# Používá se pro resolvání generického sentinelu "rate_decision"
+COUNTRY_TO_RATE_KEY = {
+    "USD": "fed_rate",
+    "EUR": "ecb_rate",
+    "GBP": "boe_rate",
+    "JPY": "boj_rate",
+    "NZD": "rbnz_rate",
+    "AUD": "rba_rate",
+    "CAD": "boc_rate",
+    "XAU": "xau_rate",
+}
+
+# Všechny rate klíče — tyto indikátory NEDOSTANOU country suffix
+# (narozdíl od běžných indikátorů jako cpi_us, nfp_eu, atd.)
+ALL_RATE_KEYS = set(COUNTRY_TO_RATE_KEY.values())
 def map_ff_title_to_indicator(title: str) -> Optional[str]:
     """Snaží se přiřadit název z Forex Factory k našemu internímu indikátoru."""
     for key, indicator in TITLE_TO_INDICATOR.items():
@@ -150,7 +171,16 @@ async def fetch_forex_factory_week(pair: str = "EURUSD") -> List[FFEvent]:
                 # Zkusíme namapovat
                 indicator_key = map_ff_title_to_indicator(title)
                 if indicator_key:
-                    if indicator_key not in ["fed_rate", "ecb_rate", "boe_rate"]:
+                    if indicator_key == "rate_decision":
+                        # Generický CB event — určíme správný rate klíč podle country
+                        resolved = COUNTRY_TO_RATE_KEY.get(country)
+                        if resolved:
+                            indicator_key = resolved
+                            logger.debug(f"rate_decision [{country}] → {indicator_key}")
+                        else:
+                            indicator_key = None  # neznámá CB — přeskočíme
+                    elif indicator_key not in ALL_RATE_KEYS:
+                        # Běžný (ne-rate) indikátor: přidej country suffix
                         if country == "USD":
                             suffix = "us"
                         elif country == "EUR":
@@ -160,6 +190,8 @@ async def fetch_forex_factory_week(pair: str = "EURUSD") -> List[FFEvent]:
                         else:
                             suffix = country.lower()
                         indicator_key = f"{indicator_key}_{suffix}"
+                    # Pokud je indicator_key v ALL_RATE_KEYS (fed_rate, boj_rate, rbnz_rate...)
+                    # → ponecháme beze změny (bez suffixu)
                 
                 # Zpracování data (očekávaný formát: 2025-01-15T13:30:00-05:00)
                 date_str = item.get("date", "")

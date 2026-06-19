@@ -161,13 +161,16 @@ async def run_daily_update(pair: str = "EURUSD"):
     tech_trend_score = score_trend(df_ohlc) if df_ohlc is not None else 0.0
 
     # VIX Risk Sentiment: vysoký VIX = tržní strach = USD safe haven = bearish EUR/USD
+    # Ale pro ZLATO (XAUUSD): vysoký VIX = tržní strach = investoři kupují zlato = BULLISH XAUUSD
     # Blend: 60% technický trend (EMA/ADX) + 40% VIX (risk environment)
     from collectors.vix import fetch_vix_score as fetch_vix
     vix_score = await fetch_vix(lookback_days=90)
     if vix_score is not None:
-        scores["trend"] = 0.60 * tech_trend_score + 0.40 * vix_score
+        # Invertovat VIX pro zlato
+        adjusted_vix = -vix_score if pair == "XAUUSD" else vix_score
+        scores["trend"] = 0.60 * tech_trend_score + 0.40 * adjusted_vix
         logger.info(
-            f"Trend score: EMA/ADX={tech_trend_score:.4f} (60%) + VIX={vix_score:.4f} (40%) "
+            f"Trend score: EMA/ADX={tech_trend_score:.4f} (60%) + VIX={adjusted_vix:.4f} (40%) "
             f"→ combined={scores['trend']:.4f}"
         )
     else:
@@ -191,8 +194,7 @@ async def run_daily_update(pair: str = "EURUSD"):
             base_net=cot_data.base_net_position,
             quote_net=cot_data.quote_net_position,
             base_lookback=cot_data.base_history_52w,
-            quote_lookback=cot_data.quote_history_52w,
-            pair=pair
+            quote_lookback=cot_data.quote_history_52w
         )
         indicator_ages["cot"] = 0  # čerstvě stažená COT data
     logger.info(f"COT score: {scores.get('cot', 0.0)}")

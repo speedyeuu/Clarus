@@ -5,7 +5,6 @@ def score_cot_combined(
     quote_net: float,      # Quote Currency net noncommercial pozice
     base_lookback: list,   # 52 týdnů Base Currency dat
     quote_lookback: list,  # 52 týdnů Quote Currency dat
-    pair: str = "EURUSD"
 ) -> float:
     """
     Kombinuje oba kontrakty do jednoho COT Bias skóre.
