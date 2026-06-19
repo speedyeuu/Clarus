@@ -245,22 +245,21 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
         apply_mean_reversion = not (day_has_high_impact or next_has_high_impact)
 
         if apply_mean_reversion:
-            for score_ref in ["baseline", "beat", "miss"]:
-                s = locals()[f"running_{score_ref}"]
-                if s > 0:
-                    if score_ref == "baseline":
-                        running_baseline -= min(running_baseline, mean_reversion_daily)
-                    elif score_ref == "beat":
-                        running_beat -= min(running_beat, mean_reversion_daily)
-                    else:
-                        running_miss -= min(running_miss, mean_reversion_daily)
-                elif s < 0:
-                    if score_ref == "baseline":
-                        running_baseline += min(abs(running_baseline), mean_reversion_daily)
-                    elif score_ref == "beat":
-                        running_beat += min(abs(running_beat), mean_reversion_daily)
-                    else:
-                        running_miss += min(abs(running_miss), mean_reversion_daily)
+            # Mean reversion pro baseline
+            if running_baseline > 0:
+                running_baseline -= min(running_baseline, mean_reversion_daily)
+            elif running_baseline < 0:
+                running_baseline += min(abs(running_baseline), mean_reversion_daily)
+            # Mean reversion pro beat scénář
+            if running_beat > 0:
+                running_beat -= min(running_beat, mean_reversion_daily)
+            elif running_beat < 0:
+                running_beat += min(abs(running_beat), mean_reversion_daily)
+            # Mean reversion pro miss scénář
+            if running_miss > 0:
+                running_miss -= min(running_miss, mean_reversion_daily)
+            elif running_miss < 0:
+                running_miss += min(abs(running_miss), mean_reversion_daily)
         else:
             logger.debug(f"  [{pred_str}] Mean reversion pozastavena (high-impact event blízko)")
 

@@ -20,8 +20,13 @@ def get_active_pairs() -> list[str]:
 
 
 # ============================================================
-# SCHEDULER — denní pipeline ve 19:05 UTC (po close US trhů)
+# SCHEDULER — interní záloha (primární trigger je cron-job.org)
 # ============================================================
+# Cron-job.org volá /api/cron/update každý den v 21:00 CET.
+# Interní scheduler slouží jako záloha pro případ výpadku cron-job.org.
+# 19:00 UTC = 21:00 CEST (léto, UTC+2) = primární letní čas
+# V zimě (CET, UTC+1) je 21:00 CET = 20:00 UTC → záloha běží hodinu dřív,
+# ale to nevadí — cron-job.org je primár a pipeline je idempotentní (upsert).
 scheduler = AsyncIOScheduler(timezone="UTC")
 
 
@@ -40,20 +45,67 @@ async def _scheduled_daily_update():
     logger.info("=== SCHEDULER: Všechny páry dokončeny ===")
 
 
+async def _cold_start_catchup():
+    """
+    Cold-start detekce: spustí se 15 sekund po startu serveru.
+    Zkontroluje, zda dnes již pipeline proběhla (záznam v daily_scores).
+    Pokud ne (např. server restartoval po 19:00 UTC), spustí ji.
+    Tím se předejde mezerám v datech po Railway deploy/restartu.
+    """
+    import asyncio
+    from datetime import date
+    from db.client import get_supabase
+
+    await asyncio.sleep(15)  # Počkáme 15s na plný startup
+
+    try:
+        db = get_supabase()
+        today = date.today().isoformat()
+        pairs = get_active_pairs()
+
+        missing_pairs = []
+        for pair in pairs:
+            res = (
+                db.table("daily_scores")
+                .select("date")
+                .eq("pair", pair)
+                .eq("date", today)
+                .limit(1)
+                .execute()
+            )
+            if not res.data:
+                missing_pairs.append(pair)
+
+        if missing_pairs:
+            logger.warning(
+                f"Cold-start: Chybí dnešní pipeline výsledky pro páry: {missing_pairs}. "
+                f"Spouštím catch-up pipeline..."
+            )
+            await _scheduled_daily_update()
+        else:
+            logger.info(f"Cold-start: Pipeline pro všechny páry dnes ({today}) již proběhla — OK.")
+    except Exception as e:
+        logger.warning(f"Cold-start check selhal (nezastaví server): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
     scheduler.add_job(
         _scheduled_daily_update,
-        CronTrigger(hour=19, minute=5, timezone="UTC"),
+        CronTrigger(hour=19, minute=0, timezone="UTC"),  # 19:00 UTC = 21:00 CEST (záloha za cron-job.org)
         id="daily_update",
         replace_existing=True,
-        misfire_grace_time=600,   # toleruje 10 min zpoždění (server sleep na free tier)
+        misfire_grace_time=3600,  # toleruje 1h zpoždění (pokryje restart i free tier sleep)
         max_instances=1,          # blokuje paralelní běh, pokud předchozí pipeline ještě neskončila
+        coalesce=True,            # pokud scheduler zmeškal více spuštění (restart), spustí jen jednou
     )
     scheduler.start()
     next_run = scheduler.get_job("daily_update").next_run_time
-    logger.info(f"Server started. Scheduler aktivní — příští pipeline: {next_run}")
+    logger.info(f"Server started. Scheduler aktivní (záloha) — příští pipeline: {next_run}")
+
+    # Spustit cold-start detekci v pozadí
+    asyncio.create_task(_cold_start_catchup())
 
     yield
 

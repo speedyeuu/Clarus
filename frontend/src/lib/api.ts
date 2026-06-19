@@ -34,9 +34,9 @@ export async function fetchAccuracySummary(pair = "EURUSD"): Promise<AccuracySum
   }
 }
 
-export async function fetchUpcomingEvents(days = 7) {
-  // Eventy jsou sdílené napříč páry (FF kalendář), pair se neposílá
-  return apiGet<UpcomingEvent[]>(`/api/events/upcoming?days=${days}`);
+export async function fetchUpcomingEvents(days = 7, pair = "EURUSD") {
+  // Eventy filtrujeme dle páru (base + quote currency)
+  return apiGet<UpcomingEvent[]>(`/api/events/upcoming?days=${days}&pair=${pair}`);
 }
 
 export interface TechnicalData {

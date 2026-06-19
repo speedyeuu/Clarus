@@ -40,11 +40,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       fetchLatestScore(pair),
       fetchScoreHistory(30, pair),
       fetchPredictions(pair),
-      fetchUpcomingEvents(7),
+      fetchUpcomingEvents(7, pair),
       fetchAccuracySummary(pair),
       fetchTechnicalAnalysis(pair),
       fetchWeekSummary(pair),
     ]);
+
 
   if (latestRes.status === "fulfilled") today_score = latestRes.value;
   else { console.error("score/latest failed:", latestRes.reason); error_msg = "Nelze načíst skóre — běží backend?"; }

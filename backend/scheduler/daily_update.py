@@ -203,7 +203,7 @@ async def run_daily_update(pair: str = "EURUSD"):
     # ---------------------------------------------------------
     # Stáhneme celý týden a vyfiltrujeme jen dnešek
     ff_week = await fetch_forex_factory_week(pair=pair)
-    ff_today = await filter_today_events(ff_week)
+    ff_today = filter_today_events(ff_week)
     
     # Pamatujeme si raw surprise data, která potom uložíme do indicator_readings
     ff_readings_to_save = []

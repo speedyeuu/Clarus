@@ -1,5 +1,5 @@
 import httpx
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 from typing import List, Optional
 from pydantic import BaseModel
@@ -187,7 +187,23 @@ async def fetch_forex_factory_week(pair: str = "EURUSD") -> List[FFEvent]:
         
     return events
 
-async def filter_today_events(events: List[FFEvent]) -> List[FFEvent]:
-    """Vyfiltruje z týdenního seznamu události jen pro dnešní den."""
-    today = datetime.now().date()
-    return [e for e in events if e.date.date() == today]
+def filter_today_events(events: List[FFEvent]) -> List[FFEvent]:
+    """
+    Vyfiltruje z týdenního seznamu události jen pro dnešní den.
+    
+    Používá UTC datum konzistentně — Railway server běží v UTC.
+    Forex Factory vrací timestampy s timezone offsetem (např. -05:00),
+    které konvertujeme do UTC před porovnáním data.
+    """
+    today_utc = datetime.now(timezone.utc).date()
+    result = []
+    for e in events:
+        if e.date.tzinfo is not None:
+            # Timezone-aware datetime — správně převedem do UTC
+            event_date_utc = e.date.astimezone(timezone.utc).date()
+        else:
+            # Naive datetime (bez timezone info) — považujeme za UTC
+            event_date_utc = e.date.date()
+        if event_date_utc == today_utc:
+            result.append(e)
+    return result
