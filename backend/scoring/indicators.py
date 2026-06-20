@@ -30,7 +30,7 @@ def score_bond_spread(
     """
     common_dates = sorted(set(quote_2y_history.keys()) & set(base_2y_history.keys()))
 
-    if len(common_dates) < 5:
+    if not common_dates:
         return 0.0
 
     spreads = [quote_2y_history[d] - base_2y_history[d] for d in common_dates]
@@ -47,13 +47,12 @@ def score_bond_spread(
         z_score = (current_spread - 1.5) / 1.0
 
     # Normalizace Z-score do bodů
-    # Běžně: Kladný Z-score (spread se rozšiřuje, US výnos roste nad Base) = USD silnější.
-    if pair.startswith("USD"):
-        # USD je Base: Silný USD = Pár roste (Bullish) → Kladné skóre
-        raw_score = z_score * 3.33
-    else:
-        # USD je Quote (EURUSD, GBPUSD): Silný USD = Pár klesá (Bearish) → Záporné skóre
-        raw_score = -z_score * 3.33
+    # Běžně: Spread je vždy Quote Yield - Base Yield.
+    # Rostoucí spread znamená, že Quote měna platí více = Quote měna posiluje.
+    # Pokud Quote měna posiluje, samotný měnový pár (BaseQuote) klesá (je Bearish).
+    # Rostoucí (kladný) Z-score spreadu tak VŽDY znamená záporné (Bearish) skóre páru, 
+    # bez ohledu na to, jestli pár začíná nebo nezačíná na USD.
+    raw_score = -z_score * 3.33
         
     return float(max(-10.0, min(10.0, raw_score)))
 

@@ -29,42 +29,20 @@ def get_freshness_multiplier(age_days: int) -> float:
     """
     Vrátí multiplikátor váhy (0.0 - 1.0) podle stáří posledního čtení.
 
-    Logika:
-      - age 0   → 1.00 (čerstvé dnešní čtení, plná váha)
-      - age 3   → 0.90 (3 dny stará data – stále relevantní)
-      - age 7   → 0.75 (týden starý report)
-      - age 14  → 0.50 (dva týdny – výrazně zastaralý)
-      - age 21  → 0.30 (tři týdny)
-      - age 30  → 0.15 (měsíc starý report – téměř ignorovaný)
-      - age 45+ → 0.05 (čtvrtletní data – minimální vliv)
-      - age 60+ → 0.02 (starší než 2 měsíce – takřka nulový vliv)
+    Nová logika (Schodovitý graf):
+      - age 0 až 35 → 1.00 (držíme plnou váhu po dobu jednoho měsíce do další zprávy)
+      - age 36 až 60 → 0.80 (mírný pokles, pokud report zmeškáme)
+      - age 61+ → 0.50 (dlouhodobý fallback, ale nikdy nespadne úplně na 0)
 
-    Proč ne lineárně:
-      Trh reaguje nejsilněji na čerstvé zprávy. Po prvním týdnu
-      se surprise začíná "trávit" a další dva týdny jsou stále
-      relevantní ale méně. Starší data jsou prakticky zapomenutá.
-
-    Tato křivka je záměrně agresivnější pro stará data
-    než starý decay v carry-forward (který byl jen lineární).
+    Proč:
+      Chceme vytvářet "schodovité" grafy, kde fundament drží svou hodnotu 
+      až do doby, než přijde nová událost, a pak prudce uskočí na novou úroveň.
     """
-    if age_days <= 0:
-        return 1.00
-    elif age_days <= 3:
-        return 1.00 - (age_days * 0.033)   # 0 → 1.00, 3 → 0.90
-    elif age_days <= 7:
-        return 0.90 - ((age_days - 3) * 0.037)  # 3 → 0.90, 7 → 0.75
-    elif age_days <= 14:
-        return 0.75 - ((age_days - 7) * 0.036)  # 7 → 0.75, 14 → 0.50
-    elif age_days <= 21:
-        return 0.50 - ((age_days - 14) * 0.029) # 14 → 0.50, 21 → 0.30
-    elif age_days <= 30:
-        return 0.30 - ((age_days - 21) * 0.017) # 21 → 0.30, 30 → 0.15
-    elif age_days <= 45:
-        return 0.15 - ((age_days - 30) * 0.007) # 30 → 0.15, 45 → 0.05
-    elif age_days <= 60:
-        return 0.05 - ((age_days - 45) * 0.002) # 45 → 0.05, 60 → 0.02
-    else:
-        return 0.02  # Starší než 2 měsíce → minimální vliv
+    if age_days <= 35:
+        return 1.0
+    if age_days <= 60:
+        return 0.8
+    return 0.5
 
 
 async def fetch_current_weights() -> Dict[str, float]:

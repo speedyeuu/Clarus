@@ -8,6 +8,7 @@ import json
 class PolymarketMarket(BaseModel):
     title: str
     yes_probability: float
+_cached_markets = None
 
 async def fetch_polymarket_economics() -> list[PolymarketMarket]:
     """
@@ -15,6 +16,10 @@ async def fetch_polymarket_economics() -> list[PolymarketMarket]:
     Využívá vyhledávací endpoint /public-search s klíčovými slovy.
     Vrací seznam relevantních trhů a jejich 'Yes' pravděpodobnosti (implikovaných cen).
     """
+    global _cached_markets
+    if _cached_markets is not None:
+        return _cached_markets
+
     keywords = ["fed", "cpi", "gdp", "jobless claims", "nfp", "payrolls", "ecb", "inflation", "unemployment", "rate"]
     search_terms = ["fed", "cpi", "gdp", "jobless", "nfp", "ecb", "inflation", "unemployment"]
     results = []
@@ -93,6 +98,7 @@ async def fetch_polymarket_economics() -> list[PolymarketMarket]:
         except Exception as e:
             logger.warning(f"Error fetching Polymarket search term '{term}': {e}")
             
+    _cached_markets = results
     return results
 
 def extract_signal_from_polymarket(event_title: str, markets: list[PolymarketMarket]) -> Optional[float]:

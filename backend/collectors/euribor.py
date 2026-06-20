@@ -116,20 +116,26 @@ async def _fetch_euribor3m_fred() -> Optional[float]:
     return None
 
 
+_cached_euribor_signal = None
+
 async def fetch_euribor_signal(current_ecb_rate: float = 3.25, pair: str = "EURUSD") -> Optional[EuriborSignal]:
     """
     Hlavní vstupní bod pro Euribor OIS signál.
-    Funguje pouze pro EURUSD.
+    Funguje pro všechny páry obsahující EUR.
     
     Interpretace:
     - Euribor 3M = tržní sazba pro 3měsíční mezibankovní půjčky v EUR
     - Pokud je Euribor 3M níže než aktuální ECB sazba → trh čeká snížení
     - Divergence o 0.25% = 100% šance na jeden pohyb (cut nebo hike)
     """
-    if pair != "EURUSD":
-        logger.info(f"OIS Signál (Euribor) je podporován jen pro EURUSD, přeskočeno pro {pair}.")
+    if "EUR" not in pair:
+        logger.info(f"OIS Signál (Euribor) je podporován jen pro EUR páry, přeskočeno pro {pair}.")
         return None
         
+    global _cached_euribor_signal
+    if _cached_euribor_signal is not None:
+        return _cached_euribor_signal
+
     logger.info("Zjišťuji tržní očekávání na sazby (Euribor/OIS)...")
 
     # --- 1. Primární: Euribor 3M z FRED ---
@@ -140,7 +146,7 @@ async def fetch_euribor_signal(current_ecb_rate: float = 3.25, pair: str = "EURU
             f"Euribor Signal [FRED] (Euribor 3M={euribor_3m:.3f}%, ECB={current_ecb_rate:.2f}%) "
             f"→ Cut:{prob_cut:.0%} Hold:{prob_hold:.0%} Hike:{prob_hike:.0%}"
         )
-        return EuriborSignal(
+        _cached_euribor_signal = EuriborSignal(
             implied_rate=round(euribor_3m, 3),
             current_ecb_rate=current_ecb_rate,
             prob_cut=prob_cut,
@@ -148,6 +154,7 @@ async def fetch_euribor_signal(current_ecb_rate: float = 3.25, pair: str = "EURU
             prob_hold=prob_hold,
             source="fred_euribor3m",
         )
+        return _cached_euribor_signal
 
     # --- 2. Záložní: €STR z ECB SDMX ---
     estr = await _fetch_estr_rate()
@@ -159,7 +166,7 @@ async def fetch_euribor_signal(current_ecb_rate: float = 3.25, pair: str = "EURU
             f"Euribor Signal [ECB €STR proxy] (proxy={euribor_proxy:.3f}%, ECB={current_ecb_rate:.2f}%) "
             f"→ Cut:{prob_cut:.0%} Hold:{prob_hold:.0%} Hike:{prob_hike:.0%}"
         )
-        return EuriborSignal(
+        _cached_euribor_signal = EuriborSignal(
             implied_rate=round(euribor_proxy, 3),
             current_ecb_rate=current_ecb_rate,
             prob_cut=prob_cut,
@@ -167,6 +174,7 @@ async def fetch_euribor_signal(current_ecb_rate: float = 3.25, pair: str = "EURU
             prob_hold=prob_hold,
             source="ecb_estr_proxy",
         )
+        return _cached_euribor_signal
 
     # --- 3. Fallback ---
     logger.error("Nepodařilo se stáhnout žádná tržní data pro Euribor/€STR signal. Vracím None.")

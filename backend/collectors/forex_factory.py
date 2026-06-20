@@ -140,12 +140,16 @@ def map_ff_title_to_indicator(title: str) -> Optional[str]:
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+_cached_ff_data = None
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 async def fetch_forex_factory_week(pair: str = "EURUSD") -> List[FFEvent]:
     """
     Stáhne JSON kalendář z Forex Factory pro tento týden.
     Vyfiltruje jen měny z daného páru s High/Medium dopadem.
     """
+    global _cached_ff_data
+    
     base = pair[:3]
     quote = pair[3:]
     allowed_countries = [base, quote]
@@ -154,12 +158,16 @@ async def fetch_forex_factory_week(pair: str = "EURUSD") -> List[FFEvent]:
     
     events = []
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(FF_URL)
-            response.raise_for_status()
-            data = response.json()
-            
-            for item in data:
+        if _cached_ff_data is None:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(FF_URL)
+                response.raise_for_status()
+                _cached_ff_data = response.json()
+                logger.info("Forex Factory JSON successfully downloaded and cached.")
+        
+        data = _cached_ff_data
+        
+        for item in data:
                 country = item.get("country", "")
                 impact = item.get("impact", "")
                 

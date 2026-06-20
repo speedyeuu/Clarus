@@ -89,6 +89,25 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
     `${i === 0 ? "M" : "L"} ${xScale(i, total, p.date)} ${yScale(p.value)}`
   ).join(" ");
 
+  // Funkce pro sestavení SVG path pro specifický fundament
+  const buildIndicatorPath = (key: keyof DailyScore) => {
+    // Filtrujeme pouze body, které nejsou null
+    const points = filteredHistory
+      .map((d, i) => ({ date: d.date, value: d[key] as number | null, index: i }))
+      .filter(p => p.value !== null);
+      
+    if (points.length === 0) return "";
+    
+    return points.map((p, i) => 
+      `${i === 0 ? "M" : "L"} ${xScale(p.index, total, p.date)} ${yScale(p.value!)}`
+    ).join(" ");
+  };
+
+  const pathInterestRates = buildIndicatorPath("score_interest_rates");
+  const pathInflation = buildIndicatorPath("score_inflation");
+  const pathLabor = buildIndicatorPath("score_labor");
+  const pathCot = buildIndicatorPath("score_cot");
+
   const predPath = predictionPathPoints.map((p, i) =>
     `${i === 0 ? "M" : "L"} ${xScale(0, 0, p.date)} ${yScale(p.value)}`
   ).join(" ");
@@ -255,7 +274,7 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
 
       <div className="card-body" style={{ padding: "16px 20px 12px" }}>
         {/* Legend */}
-        <div style={{ display: "flex", gap: "20px", marginBottom: "12px", fontSize: "11px" }}>
+        <div style={{ display: "flex", gap: "20px", marginBottom: "12px", fontSize: "11px", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <div style={{ width: "20px", height: "2px", background: "var(--text-secondary)", borderRadius: "1px" }} />
             <span style={{ color: "var(--text-secondary)" }}>Historické skóre</span>
@@ -267,6 +286,22 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <div style={{ width: "14px", height: "8px", background: "rgba(244,63,94,0.15)", borderRadius: "2px" }} />
             <span style={{ color: "var(--text-secondary)" }}>Predikční zóna</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "10px" }}>
+            <div style={{ width: "15px", height: "1.5px", background: "#a855f7", opacity: 0.6 }} />
+            <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>Úrokové sazby (20%)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: "15px", height: "1.5px", background: "#f97316", opacity: 0.6 }} />
+            <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>Inflace (18%)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: "15px", height: "1.5px", background: "#0ea5e9", opacity: 0.6 }} />
+            <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>Trh práce (12%)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: "15px", height: "1.5px", background: "#eab308", opacity: 0.6 }} />
+            <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>COT Bias (11%)</span>
           </div>
         </div>
 
@@ -312,6 +347,12 @@ export default function ScoreChart({ history, predictions, accuracy }: Props) {
             {filteredPredictionPoints.length > 0 && (
               <path d={bandPath} fill="rgba(244,63,94,0.08)" stroke="none" />
             )}
+
+            {/* Individual Indicator Lines */}
+            {pathInterestRates && <path d={pathInterestRates} fill="none" stroke="#a855f7" strokeWidth="1" strokeLinecap="round" opacity="0.5" />}
+            {pathInflation && <path d={pathInflation} fill="none" stroke="#f97316" strokeWidth="1" strokeLinecap="round" opacity="0.4" />}
+            {pathLabor && <path d={pathLabor} fill="none" stroke="#0ea5e9" strokeWidth="1" strokeLinecap="round" opacity="0.4" />}
+            {pathCot && <path d={pathCot} fill="none" stroke="#eab308" strokeWidth="1" strokeLinecap="round" opacity="0.4" />}
 
             {/* History area fill */}
             {historyPoints.length > 1 && (

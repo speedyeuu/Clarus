@@ -38,12 +38,12 @@ CARRY_FORWARD_CONFIG = {
     "retail_sentiment": {"max_days": 7,  "decay": False},
     "seasonality":      {"max_days": 30, "decay": False},
     # DECAY — lineárně klesá k 0 (surprise stárne, trh ho přehodnocuje)
-    "inflation":        {"max_days": 30, "decay": True},
-    "gdp":              {"max_days": 60, "decay": True},
-    "labor":            {"max_days": 30, "decay": True},
-    "spmi":             {"max_days": 30, "decay": True},
-    "mpmi":             {"max_days": 30, "decay": True},
-    "retail_sales":     {"max_days": 30, "decay": True},
+    "inflation":        {"max_days": 45, "decay": False},
+    "gdp":              {"max_days": 60, "decay": False},
+    "labor":            {"max_days": 30, "decay": False},
+    "spmi":             {"max_days": 30, "decay": False},
+    "mpmi":             {"max_days": 30, "decay": False},
+    "retail_sales":     {"max_days": 30, "decay": False},
     # trend → NO CARRY: přepočítává se každý den čerstvě z cen
 }
 
@@ -102,9 +102,13 @@ async def fetch_previous_scores(pair: str = "EURUSD") -> tuple[dict, dict]:
                 if scores_on_latest_date:
                     avg_raw_score = sum(scores_on_latest_date) / len(scores_on_latest_date)
                     
-                    # Aplikace lineárního decay od skutečného data události
-                    decay_factor = max(0.0, 1.0 - (age_days / max_days))
-                    carried = avg_raw_score * decay_factor
+                    use_decay = config.get("decay", True)
+                    if use_decay:
+                        decay_factor = max(0.0, 1.0 - (age_days / max_days))
+                        carried = avg_raw_score * decay_factor
+                    else:
+                        decay_factor = 1.0
+                        carried = avg_raw_score
                     
                     scores[generic_indicator] = carried
                     ages[generic_indicator] = age_days
@@ -153,6 +157,13 @@ async def fetch_previous_scores(pair: str = "EURUSD") -> tuple[dict, dict]:
                     break
     except Exception as e:
         logger.warning(f"Chyba při čtení daily_scores pro kontinuální fallback: {e}")
+
+    # Fallback na 0.0 pro chybějící indikátory, aby se do DB neukládalo None (což v UI dělá N/A)
+    all_indicators = ff_categories + continuous_categories
+    for ind in all_indicators:
+        if ind not in scores:
+            scores[ind] = 0.0
+            ages[ind] = 30  # Bezpečný default věk
 
     return scores, ages
 
@@ -252,21 +263,28 @@ async def run_daily_update(pair: str = "EURUSD"):
     }
     base_rate_key = RATE_KEYS.get(pair[:3], "ecb_rate")
     quote_rate_key = RATE_KEYS.get(pair[3:], "fed_rate")
+    
+    DEFAULT_RATES = {
+        "fed_rate": 5.50,
+        "ecb_rate": 4.25,
+        "boe_rate": 5.25,
+        "boj_rate": 0.25,
+        "rbnz_rate": 5.50,
+        "rba_rate": 4.35,
+        "boc_rate": 5.00,
+        "xau_rate": 0.0
+    }
 
     try:
         res_quote = db.table("indicator_readings").select("actual").eq("indicator_name", quote_rate_key).eq("pair", pair).order("date", desc=True).limit(1).execute()
         res_base = db.table("indicator_readings").select("actual").eq("indicator_name", base_rate_key).eq("pair", pair).order("date", desc=True).limit(1).execute()
         
-        latest_quote = res_quote.data[0]["actual"] if res_quote.data else 5.25
-        
-        if base_rate_key == "xau_rate":
-            latest_base = 0.0
-        else:
-            latest_base = res_base.data[0]["actual"] if res_base.data else 4.25
+        latest_quote = res_quote.data[0]["actual"] if res_quote.data else DEFAULT_RATES.get(quote_rate_key, 5.0)
+        latest_base = res_base.data[0]["actual"] if res_base.data else DEFAULT_RATES.get(base_rate_key, 5.0)
     except Exception as e:
         logger.warning(f"Nepodařilo se načíst baseline úrokové sazby z DB: {e}")
-        latest_quote = 5.25
-        latest_base = 0.0 if base_rate_key == "xau_rate" else 4.25
+        latest_quote = DEFAULT_RATES.get(quote_rate_key, 5.0)
+        latest_base = DEFAULT_RATES.get(base_rate_key, 5.0)
 
 
     for ev in ff_today:
@@ -373,7 +391,7 @@ async def run_daily_update(pair: str = "EURUSD"):
         scores["interest_rates"] = float(max(-10.0, min(10.0, rate_diff * 2.0)))
         
         indicator_ages["interest_rates"] = 0  # počítáme denně (fallback)
-        logger.warning(
+        logger.info(
             f"Bond yields nedostupné — fallback na policy rate: "
             f"QuoteRate={latest_quote:.2f}%, BaseRate={latest_base:.2f}%, "
             f"diff={rate_diff:.2f}% → score={scores['interest_rates']:.4f}"

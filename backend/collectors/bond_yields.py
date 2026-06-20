@@ -60,16 +60,17 @@ async def _fetch_fred_history(series_id: str, lookback_days: int = 90) -> Dict[s
         return {}
 
 
-async def _fetch_de2y_ecb_fallback() -> Optional[float]:
+async def _fetch_de2y_ecb_fallback() -> Dict[str, float]:
     """
     Záloha pro DE 2Y výnos přes ECB SDMX yield curve dataset.
-    Vrací aktuální hodnotu nebo None.
+    Vrací historii jako dict {YYYY-MM-DD: float}.
     """
     url = (
         "https://data-api.ecb.europa.eu/service/data/"
         "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y"
-        "?lastNObservations=5"
+        "?lastNObservations=100"
     )
+    result = {}
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(url, headers={"Accept": "text/csv"})
@@ -78,14 +79,14 @@ async def _fetch_de2y_ecb_fallback() -> Optional[float]:
                 from io import StringIO
                 reader = csv.DictReader(StringIO(r.text))
                 for row in reader:
+                    date_str = row.get("TIME_PERIOD", "")
                     val = row.get("OBS_VALUE", "").strip()
-                    if val:
-                        result = float(val)
-                        logger.info(f"ECB YC DE 2Y (fallback): {result:.3f}%")
-                        return result
+                    if date_str and val:
+                        result[date_str] = float(val)
+                logger.info(f"ECB YC DE 2Y (fallback): staženo {len(result)} historických záznamů.")
     except Exception as e:
         logger.warning(f"ECB YC DE 2Y fallback failed: {e}")
-    return None
+    return result
 
 
 async def _fetch_uk2y_eodhd(lookback_days: int = 90) -> Dict[str, float]:
@@ -99,7 +100,7 @@ async def _fetch_uk2y_eodhd(lookback_days: int = 90) -> Dict[str, float]:
         logger.info("EODHD API klíč není nastaven — UK 2Y Gilts přeskočeny, bude použit fallback na policy rates.")
         return {}
 
-    url = f"https://eodhd.com/api/eod/GB2Y.GBOV?api_token={settings.eodhd_api_key}&fmt=json&limit={lookback_days}&period=d"
+    url = f"https://eodhd.com/api/eod/GB2Y.BOND?api_token={settings.eodhd_api_key}&fmt=json&limit={lookback_days}&period=d"
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -121,7 +122,7 @@ async def _fetch_uk2y_eodhd(lookback_days: int = 90) -> Dict[str, float]:
             logger.info(f"EODHD UK 2Y: staženo {len(result)} záznamů")
             return result
     except Exception as e:
-        logger.warning(f"Error fetching UK 2Y from EODHD: {e}")
+        logger.info(f"Error fetching UK 2Y from EODHD: {e} - falling back to policy rates")
         return {}
 
 
@@ -136,31 +137,34 @@ async def fetch_2y_yield_histories(
     """
     logger.info(f"Stahuji Quote 2Y a Base 2Y výnosy pro {pair}...")
 
-    if pair == "EURNZD":
-        logger.warning(f"Denní NZD dluhopisy nejsou přes FRED k dispozici. Použije se automaticky fallback na úrokové sazby centrálních bank.")
-        return None
+    # Policy rates pro dummy fallback
+    policy_rates = {"GBPUSD": 5.25, "EURNZD": 5.50, "EURJPY": 0.25, "USDJPY": 0.25}
 
-    # EURJPY: EUR je Base (DE 2Y), JPY je Quote — zpracujeme samostatně dříve než
-    # začneme stahovat DGS2 (USD), který pro EURJPY nepotřebujeme.
-    if pair == "EURJPY":
-        de_hist = await _fetch_fred_history("IRDE2YD156N", lookback_days)
-        jp_hist = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
-        if not de_hist or not jp_hist:
-            logger.error("DE nebo JP výnosy nedostupné — bond spread scoring přeskočen pro EURJPY.")
+    if pair == "EURNZD":
+        logger.info(f"Denní NZD dluhopisy nejsou přes FRED k dispozici. Aplikuji dummy policy rate pro udržení dynamického spreadu.")
+        base_hist = await _fetch_de2y_ecb_fallback()
+        if not base_hist:
             return None
-        quote_hist = jp_hist
+        quote_hist = {d: policy_rates["EURNZD"] for d in base_hist.keys()}
+        return quote_hist, base_hist
+
+    # EURJPY: EUR je Base (DE 2Y), JPY je Quote
+    if pair == "EURJPY":
+        de_hist = await _fetch_de2y_ecb_fallback()
+        jp_hist = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
+        if not de_hist:
+            return None
+        
         base_hist = de_hist
-        common = set(quote_hist.keys()) & set(base_hist.keys())
-        if len(common) < 5:
-            logger.warning(f"Příliš málo společných dní pro EURJPY bond yields ({len(common)}).")
-        current_quote = quote_hist.get(max(quote_hist.keys()))
-        current_base = base_hist.get(max(base_hist.keys()))
-        spread = current_quote - current_base if current_quote and current_base else None
-        if spread is not None:
-            logger.info(
-                f"EURJPY Bond yields: JP 2Y={current_quote:.3f}%, DE 2Y={current_base:.3f}%, "
-                f"spread={spread:.3f}% (n_common={len(common)})"
-            )
+        # JPY 10Y je z FRED velmi řídký, tak ho raději obohatíme policy ratem,
+        # pokud má méně než 5 společných dní, aby se Z-score nerozbilo.
+        common_test = set(jp_hist.keys()) & set(de_hist.keys()) if jp_hist else set()
+        if len(common_test) < 5:
+            logger.info("JP výnosy nedostatečné — použiji dummy policy rate (0.25) pro JPY k udržení dynamiky.")
+            quote_hist = {d: policy_rates["EURJPY"] for d in de_hist.keys()}
+        else:
+            quote_hist = jp_hist
+            
         return quote_hist, base_hist
 
 
@@ -168,14 +172,20 @@ async def fetch_2y_yield_histories(
     # Pro USDJPY je Quote = JPY, ale používáme US 2Y jako proxy pro DXY.
     if pair == "USDJPY":
         # Pro USDJPY: USD je Base, JPY je Quote
-        # quote_hist = JP yields, base_hist = US yields
         jp_hist = await _fetch_fred_history("IRLTLT01JPM156N", lookback_days)
         us_hist_for_base = await _fetch_fred_history("DGS2", lookback_days)
-        if not jp_hist or not us_hist_for_base:
-            logger.error("JP nebo US výnosy nedostupné — bond spread scoring přeskočen.")
+        if not us_hist_for_base:
             return None
-        quote_hist = jp_hist
+            
         base_hist = us_hist_for_base
+        common_test = set(jp_hist.keys()) & set(us_hist_for_base.keys()) if jp_hist else set()
+        if len(common_test) < 5:
+            logger.info("JP výnosy nedostatečné — použiji dummy policy rate (0.25) pro JPY k udržení dynamiky.")
+            quote_hist = {d: policy_rates["USDJPY"] for d in us_hist_for_base.keys()}
+        else:
+            quote_hist = jp_hist
+            
+        return quote_hist, base_hist
     else:
         # Pro ostatní páry: USD je Quote
         quote_hist = await _fetch_fred_history("DGS2", lookback_days)
@@ -184,50 +194,30 @@ async def fetch_2y_yield_histories(
             return None
     
     if pair == "EURUSD":
-        # DE 2Y (primární zdroj: FRED IRDE2YD156N)
-        base_hist = await _fetch_fred_history("IRDE2YD156N", lookback_days)
-
-        # DE 2Y fallback: ECB SDMX
+        # DE 2Y primární zdroj
+        base_hist = await _fetch_de2y_ecb_fallback()
         if not base_hist:
-            logger.warning("DE 2Y z FRED nedostupné, zkouším ECB SDMX fallback...")
-            de_val = await _fetch_de2y_ecb_fallback()
-            if de_val is not None:
-                base_hist = {d: de_val for d in quote_hist.keys()}
-                logger.info(f"DE 2Y ECB fallback: {de_val:.3f}% aplikováno na {len(base_hist)} dní Quote historie")
-            else:
-                logger.error("DE 2Y výnosy nedostupné ani z ECB — bond spread scoring přeskočen.")
-                return None
+            return None
     elif pair == "GBPUSD":
         base_hist = await _fetch_uk2y_eodhd(lookback_days)
         if not base_hist:
-            logger.warning("UK 2Y výnosy nedostupné z EODHD — použit fallback na policy rate differential.")
-            return None
+            logger.info("UK 2Y výnosy nedostupné z EODHD — použiji dummy policy rate (5.25) pro GBP k udržení dynamiky.")
+            base_hist = {d: policy_rates["GBPUSD"] for d in quote_hist.keys()}
     elif pair == "XAUUSD":
-        # Zlato (XAU) nenese žádný úrok (yield = 0.0%)
-        # Vracíme nulový výnos pro všechny dny, pro které máme USD historii
         base_hist = {d: 0.0 for d in quote_hist.keys()}
-        logger.info(f"Aplikován nulový výnos (0.0%) pro zlato na {len(base_hist)} dní Quote historie.")
     else:
-        logger.warning(f"Pro pár {pair} nejsou bond yields naimplementované. Používám empty spread.")
+        logger.warning(f"Pro pár {pair} nejsou bond yields naimplementované.")
         return None
 
-
-
-    # Zkontrolujeme dostatek překrývajících se dní pro Z-score
+    # Logging spreadu
     common = set(quote_hist.keys()) & set(base_hist.keys())
-    if len(common) < 5:
-        logger.warning(
-            f"Příliš málo společných dní pro bond yields ({len(common)}) — "
-            f"Z-score normalizace nebude přesná."
-        )
-
-    current_quote = quote_hist.get(max(quote_hist.keys()))
-    current_base = base_hist.get(max(base_hist.keys()))
-    spread = current_quote - current_base if current_quote and current_base else None
+    current_quote = quote_hist.get(max(quote_hist.keys())) if quote_hist else None
+    current_base = base_hist.get(max(base_hist.keys())) if base_hist else None
+    spread = current_quote - current_base if current_quote is not None and current_base is not None else None
 
     if spread is not None:
         logger.info(
-            f"Bond yields: Quote 2Y={current_quote:.3f}%, Base 2Y={current_base:.3f}%, "
+            f"Bond yields: Quote={current_quote:.3f}%, Base={current_base:.3f}%, "
             f"spread={spread:.3f}% (n_common={len(common)})"
         )
 
