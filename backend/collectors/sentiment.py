@@ -31,7 +31,7 @@ async def fetch_retail_sentiment(pair: str = "EURUSD") -> Optional[SentimentData
             })
             login_data = r_login.json()
             
-            if login_data.get("error", False) == True:
+            if login_data.get("error", False):
                 logger.error(f"MyFXBook odmítl přístup. Špatný login? Detail: {login_data.get('message')}")
                 return None
                 

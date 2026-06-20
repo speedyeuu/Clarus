@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from db.client import get_supabase
 from datetime import date, timedelta
 
@@ -91,7 +91,7 @@ async def get_accuracy_summary(pair: str = "EURUSD"):
             "week_count":  len(all_7),
             "month_count": len(all_30),
         }
-    except Exception as e:
+    except Exception:
         return {"week_avg": None, "month_avg": None, "week_count": 0, "month_count": 0}
 
 
@@ -128,13 +128,11 @@ async def get_week_summary(pair: str = "EURUSD"):
         result = _query(FULL_SELECT, "eq", today)
         if not result.data:
             result = _query(FULL_SELECT, "gte", today)
-        has_scenarios = True
     except Exception:
         # Sloupce scenario_beat/miss zatím neexistují — fallback na základní select
         result = _query(BASE_SELECT, "eq", today)
         if not result.data:
             result = _query(BASE_SELECT, "gte", today)
-        has_scenarios = False
 
     preds = result.data
 
@@ -156,7 +154,7 @@ async def get_week_summary(pair: str = "EURUSD"):
             "pair": pair,
             "current_score": current_score,
             "current_label": current_label,
-            "direction_label": f"⚪ Čekám na data",
+            "direction_label": "⚪ Čekám na data",
             "score_end_expected": current_score,
             "score_change": 0.0,
             "change_description": "žádné události",

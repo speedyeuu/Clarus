@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import statistics
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 from .normalizer import NormalizationStats, normalize_surprise_to_score, parse_forex_factory_value
 
 

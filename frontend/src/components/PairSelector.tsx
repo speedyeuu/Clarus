@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 
-// Aktivní páry — přidat nový pár = přidat sem + do backendu ACTIVE_PAIRS
 const PAIRS = [
   { id: "EURUSD", label: "EUR/USD", flag: "🇪🇺" },
   { id: "GBPUSD", label: "GBP/USD", flag: "🇬🇧" },
   { id: "USDJPY", label: "USD/JPY", flag: "🇯🇵" },
+  { id: "USDCHF", label: "USD/CHF", flag: "🇨🇭" },
+  { id: "USDCAD", label: "USD/CAD", flag: "🇨🇦" },
+  { id: "NZDUSD", label: "NZD/USD", flag: "🇳🇿" },
+  { id: "AUDUSD", label: "AUD/USD", flag: "🇦🇺" },
   { id: "EURNZD", label: "EUR/NZD", flag: "🇳🇿" },
   { id: "EURJPY", label: "EUR/JPY", flag: "🇯🇵" },
   { id: "XAUUSD", label: "XAU/USD", flag: "🪙" },

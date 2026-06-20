@@ -4,6 +4,10 @@ from contextlib import asynccontextmanager
 from loguru import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 import asyncio
 
 from api import scores, predictions, events, cron
@@ -114,10 +118,6 @@ async def lifespan(app: FastAPI):
     logger.info("Server stopped")
 
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 

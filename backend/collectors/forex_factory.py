@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from loguru import logger
 from typing import List, Optional
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Konstanty
 FF_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
@@ -137,8 +138,6 @@ def map_ff_title_to_indicator(title: str) -> Optional[str]:
         if key.lower() in title.lower():
             return indicator
     return None
-
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 _cached_ff_data = None
 

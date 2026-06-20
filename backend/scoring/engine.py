@@ -1,7 +1,5 @@
 from loguru import logger
 from typing import Dict
-import json
-from db.client import get_supabase
 
 # Data class z lib/types.ts zrcadlená v Pythonu
 class DailyScoreModel:
@@ -16,12 +14,18 @@ class DailyScoreModel:
 
 def get_label_for_score(score: float) -> str:
     """Převod celkového skóre na trend label dle plan.md na škále -10 až +10."""
-    if score >= 7.0: return "Strong Bullish"
-    if score >= 3.0: return "Bullish"
-    if score >= 1.0: return "Mildly Bullish"
-    if score > -1.0: return "Neutral"
-    if score > -3.0: return "Mildly Bearish"
-    if score > -7.0: return "Bearish"
+    if score >= 7.0:
+        return "Strong Bullish"
+    if score >= 3.0:
+        return "Bullish"
+    if score >= 1.0:
+        return "Mildly Bullish"
+    if score > -1.0:
+        return "Neutral"
+    if score > -3.0:
+        return "Mildly Bearish"
+    if score > -7.0:
+        return "Bearish"
     return "Strong Bearish"
 
 
@@ -45,41 +49,28 @@ def get_freshness_multiplier(age_days: int) -> float:
     return 0.5
 
 
-async def fetch_current_weights() -> Dict[str, float]:
-    """Stáhne aktuálně schválené váhy z databáze weight_settings, fallback na defaults."""
-    db = get_supabase()
+async def fetch_current_weights(pair: str = "EURUSD") -> Dict[str, float]:
+    """
+    Získá aktuální makroekonomický režim a vrátí dynamicky vypočítané váhy fundamentů.
+    Toto nahrazuje dřívější statické váhy z DB weight_settings.
+    """
+    from prediction.regime import detect_market_regime, get_regime_weights
 
-    # Výchozí váhy — optimalizováno pro EUR/USD swing trading
-    # labor↑ (NFP je nejdůležitější týdenní event pro FX)
-    # spmi↑  (Services PMI > Manufacturing PMI pro moderní ekonomiky)
-    # mpmi↓  (Manufacturing < 20% GDP, trh reaguje méně než na services)
-    default_weights = {
-        "interest_rates": 0.20,
-        "inflation":      0.18,
-        "gdp":            0.11,
-        "labor":          0.12,   # ↑ bylo 0.10 — NFP/unemployment dominantní pro USD
-        "cot":            0.11,
-        "spmi":           0.09,   # ↑ bylo 0.08 — Services PMI relevantní pro FX
-        "mpmi":           0.03,   # ↓ bylo 0.06 — Manufacturing méně relevantní pro EUR/USD
-        "retail_sales":   0.05,
-        "trend":          0.05,
-        "retail_sentiment": 0.04,
-        "seasonality":    0.02
-    }
-
-    try:
-        res = db.table("weight_settings").select("weights").eq("id", "current").single().execute()
-        if res.data and "weights" in res.data:
-            return res.data["weights"]
-    except Exception as e:
-        logger.warning(f"Nepodařilo se stáhnout vlastní váhy, použiji fallback: {e}")
-
-    return default_weights
+    regime = await detect_market_regime()
+    base_curr = pair[:3]
+    quote_curr = pair[3:]
+    
+    regime_weights = get_regime_weights(regime, base_curr, quote_curr)
+    
+    # Můžeme to stále zkoušet skloubit s user-defined DB vahami,
+    # ale pro plný ML režim použijeme nativní Regime weights.
+    return regime_weights
 
 
 async def calculate_total_score(
     scores: Dict[str, float],
     indicator_ages: Dict[str, int] | None = None,
+    pair: str = "EURUSD",
 ) -> DailyScoreModel:
     """
     Vezme surové hodnoty z jednotlivých sub-analýz (škála -10 až +10),
@@ -111,7 +102,7 @@ async def calculate_total_score(
       scores: {indicator_key: float} — surové skóre -10 až +10
       indicator_ages: {indicator_key: int} — věk čtení ve dnech (None = unknown → 30d)
     """
-    weights = await fetch_current_weights()
+    weights = await fetch_current_weights(pair)
     ages = indicator_ages or {}
 
     # Ověříme, zda součet vah dává 1.0

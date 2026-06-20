@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException
 from db.client import get_supabase
-from typing import Optional
 
 router = APIRouter()
 

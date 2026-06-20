@@ -441,7 +441,7 @@ async def run_daily_update(pair: str = "EURUSD"):
     # ---------------------------------------------------------
     # calculate_total_score stáhne váhy z databáze a vyprodukuje finální float score a label
     # Předáme i věk každého indikátoru pro freshness multiplier
-    daily_model = await calculate_total_score(scores, indicator_ages)
+    daily_model = await calculate_total_score(scores, indicator_ages, pair=pair)
     logger.info(f"--- DNEŠNÍ SKÓRE: {daily_model.total:.2f} ({daily_model.label}) ---")
     
     # ---------------------------------------------------------

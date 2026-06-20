@@ -82,19 +82,18 @@ def parse_forex_factory_value(value_str: str) -> float | None:
     if not value_str:
         return None
     try:
-        # Odstranit procenta, K, M, B
         clean_str = value_str.upper().replace('%', '').strip()
         multiplier = 1.0
         if clean_str.endswith('K'):
             clean_str = clean_str[:-1]
-            # NFP typicky vrací "215K", my můžeme držet jednotku v tisících pro obě (actual/forecast)
-            # takže multiplier nepotřebujeme, pokud nechceme normalizovat absolutně. 
-            # Pro zjednodušení to necháme v těch jednotkách, jaké to jsou
+            multiplier = 1000.0
         elif clean_str.endswith('M'):
             clean_str = clean_str[:-1]
+            multiplier = 1000000.0
         elif clean_str.endswith('B'):
             clean_str = clean_str[:-1]
+            multiplier = 1000000000.0
             
-        return float(clean_str)
+        return float(clean_str) * multiplier
     except Exception:
         return None

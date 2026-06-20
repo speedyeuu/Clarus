@@ -14,7 +14,6 @@ import httpx
 from loguru import logger
 from typing import Optional, Dict, Tuple
 from datetime import date, timedelta
-import pandas as pd
 from config import get_settings
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -141,7 +140,7 @@ async def fetch_2y_yield_histories(
     policy_rates = {"GBPUSD": 5.25, "EURNZD": 5.50, "EURJPY": 0.25, "USDJPY": 0.25}
 
     if pair == "EURNZD":
-        logger.info(f"Denní NZD dluhopisy nejsou přes FRED k dispozici. Aplikuji dummy policy rate pro udržení dynamického spreadu.")
+        logger.info("Denní NZD dluhopisy nejsou přes FRED k dispozici. Aplikuji dummy policy rate pro udržení dynamického spreadu.")
         base_hist = await _fetch_de2y_ecb_fallback()
         if not base_hist:
             return None

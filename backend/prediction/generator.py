@@ -1,7 +1,9 @@
 from loguru import logger
 from datetime import datetime, timedelta
 from typing import List, Dict
+import math
 from db.client import get_supabase
+from scoring.mappings import SPECIFIC_TO_GENERIC
 
 # Budeme potřebovat kalendář z FF (už stažený a uložený do DB nebo stažený z netu)
 # Polymarket probability a OIS signals
@@ -16,8 +18,6 @@ def calculate_confidence(events_count: int) -> float:
         return 0.60
     return 0.30     # Mnoho zpráv = velká nejistota (může to dopadnout jakkoliv)
 
-
-from scoring.mappings import SPECIFIC_TO_GENERIC
 
 def map_probability_to_score_shift(probability: float, indicator_weight: float, invert: bool = False) -> float:
     """
@@ -90,25 +90,12 @@ async def calculate_polymarket_calibration(pair: str = "EURUSD") -> float:
                 continue
                 
             # Určíme, zda má vyšší pravděpodobnost znamenat kladné nebo záporné překvapení
-            # (Inverze pro Base/Quote měnu)
-            base_currency = pair[:3]
-            quote_currency = pair[3:]
+            # Polymarket YES predikuje růst samotného indikátoru (např. inflace)
+            # Surprise je kladné, pokud indikátor roste (actual > forecast).
+            # Nemusíme a nesmíme řešit, zda je to Base nebo Quote měna, protože
+            # vyhodnocujeme pouze úspěšnost Polymarketu vůči samotnému indikátoru!
             
-            invert = False
-            if country == base_currency:
-                invert = False
-                if ind_key and "unemployment" in ind_key.lower():
-                    invert = True
-            elif country == quote_currency:
-                invert = True
-                if ind_key and "unemployment" in ind_key.lower():
-                    invert = False
-                    
-            # Směr předpovídaný Polymarketem (očekáváme YES = růst hodnoty)
             pred_dir = 1 if prob > 0.5 else -1 if prob < 0.5 else 0
-            if invert:
-                pred_dir = -pred_dir
-                
             actual_dir = 1 if surprise > 0 else -1
             
             if pred_dir != 0:
@@ -137,15 +124,64 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
 
     Vylepšení:
       1. Confidence bands: více eventů = VĚTŠÍ nejistota (každý může překvapit)
-      2. Mean reversion se zastaví den před high-impact eventem (NFP, CPI, FOMC)
+      2. Nelineární XGBoost vrstva: Pokud je model natrénován, použije ML k modifikaci trendu
       3. Scénářová analýza: beat vs miss trajektorie
       4. Lidsky čitelný výstup uložený v metadatech
     """
+    from prediction.ml_engine import predict_xgboost_delta
+    from collectors.cross_asset import fetch_cross_asset_score
+
     db = get_supabase()
     today_date = datetime.now().date()
     today_str = today_date.isoformat()
 
-    logger.info("Generování 7denní predikce (s vylepšenou logikou)...")
+    logger.info("Generování 7denní predikce (ML XGBoost + Kalendář)...")
+
+    # 0. Načtení aktuálních sub-skóre pro XGBoost
+    try:
+        raw_res = db.table("daily_scores").select("*").eq("date", today_str).eq("pair", pair).single().execute()
+        current_scores = raw_res.data or {}
+    except Exception as e:
+        logger.warning(f"Nelze načíst dnešní surové skóre pro ML engine: {e}")
+        current_scores = {}
+
+    xgb_delta = predict_xgboost_delta(current_scores)
+    xgb_bias_per_day = (xgb_delta / 7.0) if xgb_delta is not None else 0.0
+
+    # 0.5. Načtení Cross-Asset Skóre (Zlato, Ropa, S&P 500)
+    cross_asset_score = await fetch_cross_asset_score(pair)
+    # Váha cross assetu bude efektivně 5% na konečnou změnu (škála je +-10)
+    # Rozdělíme na 7 dní:
+    cross_asset_bias_per_day = (cross_asset_score * 0.05) / 7.0
+
+    # 0.8. Kalmanův filtr (Fair Value Smoother)
+    # Spočítáme vyhlazený výchozí bod predikce ze zubatých historických dat
+    try:
+        hist_res = db.table("daily_scores").select("total_score").eq("pair", pair).order("date", desc=True).limit(10).execute()
+        hist_scores = [row["total_score"] for row in (hist_res.data or [])][::-1]
+    except Exception:
+        hist_scores = []
+        
+    kalman_fair_value = current_total_score
+    if len(hist_scores) > 1:
+        # Jednoduchý 1D Kalmanův Filtr pro vyhlazení
+        X = hist_scores[0] # počáteční stav
+        P = 1.0            # počáteční chyba
+        Q = 0.05           # procesní šum (jak moc věříme modelu)
+        R = 0.5            # šum měření (jak moc věříme samotným datům)
+        
+        for z in hist_scores[1:]:
+            # Predikce
+            X_pred = X
+            P_pred = P + Q
+            # Update
+            K = P_pred / (P_pred + R)
+            X = X_pred + K * (z - X_pred)
+            P = (1 - K) * P_pred
+        
+        kalman_fair_value = X
+        logger.info(f"Kalman Filter vyhlazuje start z {current_total_score:.2f} na Fair Value: {kalman_fair_value:.2f}")
+
 
     # 1. Kalibrační faktor pro Polymarket
     calibration_factor = await calculate_polymarket_calibration(pair)
@@ -173,40 +209,15 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
         date_key = ev["event_date"]
         events_by_date.setdefault(date_key, []).append(ev)
 
-    # HIGH-IMPACT eventy pro zastavení mean reversion
-    HIGH_IMPACT_KEYS = {
-        "nfp_us", "cpi_us", "cpi_eu", "cpi_uk", "pce_us",
-        "fed_rate", "ecb_rate", "boe_rate", "gdp_flash_us", "gdp_flash_eu", "gdp_flash_uk"
-    }
-
-    def is_high_impact_day(date_str: str) -> bool:
-        """Zjistí jestli daný den má high-impact event."""
-        evs = events_by_date.get(date_str, [])
-        return any(
-            ev.get("indicator_key") in HIGH_IMPACT_KEYS or
-            str(ev.get("impact", "")).lower() in ("high", "red")
-            for ev in evs
-        )
-
-    # Mean reversion: 0.12 bodu/den (pomalejší než dřív = realističtější)
-    mean_reversion_daily = 0.12
+    # Mean reversion zrušeno: používáme čistý Martingale (Random Walk)
+    # Skóre drží svou hladinu, dokud nedojde k události.
 
     # Helper: vypočítá shift pro jeden event při dané pravděpodobnosti
-    def calc_event_shift(ev: dict, prob_override: float | None = None) -> float:
+    def calc_event_shift(ev: dict, scenario: str = "baseline") -> float:
         indicator_key = ev.get("indicator_key")
         country = ev.get("country")
         generic_key = SPECIFIC_TO_GENERIC.get(indicator_key, indicator_key) if indicator_key else None
         weight = current_weights.get(generic_key, 0.0) if generic_key else 0.0
-
-        if prob_override is not None:
-            prob = prob_override
-        elif ev.get("polymarket_yes_prob") is not None:
-            raw_prob = ev["polymarket_yes_prob"]
-            prob = 0.5 + (raw_prob - 0.5) * calibration_factor
-        elif ev.get("euribor_signal") is not None:
-            prob = float(ev["euribor_signal"])
-        else:
-            prob = 0.5
 
         base_currency = pair[:3]
         quote_currency = pair[3:]
@@ -221,12 +232,32 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
             if indicator_key and "unemployment" in indicator_key.lower():
                 invert = False
 
+        if scenario == "beat":
+            # Beat znamená nejlepší scénář pro pár (bullish)
+            # Pokud indikátor roste a invert=True, skóre klesne (bearish) -> takže chceme miss (0.15)
+            prob = 0.15 if invert else 0.85
+        elif scenario == "miss":
+            # Miss znamená nejhorší scénář pro pár (bearish)
+            prob = 0.85 if invert else 0.15
+        elif ev.get("polymarket_yes_prob") is not None:
+            raw_prob = ev["polymarket_yes_prob"]
+            prob = 0.5 + (raw_prob - 0.5) * calibration_factor
+        elif ev.get("euribor_signal") is not None:
+            prob = float(ev["euribor_signal"])
+        else:
+            prob = 0.5
+
         return map_probability_to_score_shift(prob, weight, invert)
 
     # Tři trajektorie: baseline, beat scénář, miss scénář
+    # Začínáme PŘESNĚ z reálného skóre dneška, aby graf nenavazoval skokem z nuly.
     running_baseline = current_total_score
-    running_beat = current_total_score
+    running_beat = current_total_score  # Extrémy počítáme z reálného skóre
     running_miss = current_total_score
+    
+    # Mean Reversion: Kalmanův filtr nám říká, kde by skóre mělo správně ležet (Fair Value).
+    # Každý den se proto predikce nechá z 10 % "táhnout" zpět k této Fair Value.
+    mean_reversion_bias_per_day = (kalman_fair_value - current_total_score) * 0.1
 
     predictions_to_save = []
     week_catalysts = []  # Pro lidsky čitelný výstup
@@ -234,34 +265,12 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
     for i in range(1, 8):
         pred_date = today_date + timedelta(days=i)
         pred_str = pred_date.isoformat()
-        next_day_str = (pred_date + timedelta(days=1)).isoformat()
 
         day_events = events_by_date.get(pred_str, [])
 
-        # --- Mean reversion ---
-        # Zastavíme ji pokud dnes nebo zítra je high-impact event
-        day_has_high_impact = is_high_impact_day(pred_str)
-        next_has_high_impact = is_high_impact_day(next_day_str)
-        apply_mean_reversion = not (day_has_high_impact or next_has_high_impact)
-
-        if apply_mean_reversion:
-            # Mean reversion pro baseline
-            if running_baseline > 0:
-                running_baseline -= min(running_baseline, mean_reversion_daily)
-            elif running_baseline < 0:
-                running_baseline += min(abs(running_baseline), mean_reversion_daily)
-            # Mean reversion pro beat scénář
-            if running_beat > 0:
-                running_beat -= min(running_beat, mean_reversion_daily)
-            elif running_beat < 0:
-                running_beat += min(abs(running_beat), mean_reversion_daily)
-            # Mean reversion pro miss scénář
-            if running_miss > 0:
-                running_miss -= min(running_miss, mean_reversion_daily)
-            elif running_miss < 0:
-                running_miss += min(abs(running_miss), mean_reversion_daily)
-        else:
-            logger.debug(f"  [{pred_str}] Mean reversion pozastavena (high-impact event blízko)")
+        # --- Martingale (Random Walk) ---
+        # Skóre se v absenci událostí nemění (nepřitahuje ho gravitace k nule)
+        # Fundamenty jsou perzistentní.
 
         # --- Výpočet posunů pro každý den ---
         baseline_shift = 0.0
@@ -269,9 +278,9 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
         miss_shift = 0.0
 
         for ev in day_events:
-            baseline_shift += calc_event_shift(ev)           # Reálná pravděpodobnost
-            beat_shift += calc_event_shift(ev, prob_override=0.85)   # Beat scénář
-            miss_shift += calc_event_shift(ev, prob_override=0.15)   # Miss scénář
+            baseline_shift += calc_event_shift(ev, "baseline")           # Reálná pravděpodobnost
+            beat_shift += calc_event_shift(ev, "beat")   # Beat scénář
+            miss_shift += calc_event_shift(ev, "miss")   # Miss scénář
 
             indicator_key = ev.get("indicator_key")
             generic_key = SPECIFIC_TO_GENERIC.get(indicator_key, indicator_key) if indicator_key else None
@@ -287,19 +296,25 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
                     "day": pred_str,
                     "title": ev.get("title", ""),
                     "weight": weight,
-                    "expected_shift": calc_event_shift(ev),
-                    "beat_shift": calc_event_shift(ev, 0.85),
-                    "miss_shift": calc_event_shift(ev, 0.15),
+                    "expected_shift": calc_event_shift(ev, "baseline"),
+                    "beat_shift": calc_event_shift(ev, "beat"),
+                    "miss_shift": calc_event_shift(ev, "miss"),
                 })
+
+        # K základnímu kalendářnímu posunu přidáme ML bias, Cross-Asset bias a Mean Reversion bias
+        baseline_shift += xgb_bias_per_day
+        baseline_shift += cross_asset_bias_per_day
+        baseline_shift += mean_reversion_bias_per_day
 
         running_baseline = max(-10.0, min(10.0, running_baseline + baseline_shift))
         running_beat     = max(-10.0, min(10.0, running_beat + beat_shift))
         running_miss     = max(-10.0, min(10.0, running_miss + miss_shift))
 
-        # --- Confidence bands ---
-        base_band = 0.8                          # Základní nejistota bez zpráv
+        # --- Confidence bands (Martingale expanding uncertainty) ---
+        base_volatility = 0.6  # Základní denní volatilita
         event_uncertainty = len(day_events) * 0.5  # +0.5 za každý event
-        band_width = float(min(4.0, base_band + event_uncertainty))
+        # Šířka pásma roste s odmocninou času (standardní random walk)
+        band_width = float(min(4.0, (base_volatility * math.sqrt(i)) + event_uncertainty))
 
         # Informace pro confidence — více událostí = VĚTŠÍ nejistota = NIŽŠÍ confidence
         n_ev = len(day_events)
@@ -317,8 +332,8 @@ async def generate_7day_prediction(current_total_score: float, current_weights: 
             # Scénářová analýza
             "scenario_beat": float(running_beat),
             "scenario_miss": float(running_miss),
-            # Mean reversion info
-            "mean_reversion_applied": apply_mean_reversion,
+            # Kalman Mean Reversion je aktivní
+            "mean_reversion_applied": True,
         }
         predictions_to_save.append(record)
 
