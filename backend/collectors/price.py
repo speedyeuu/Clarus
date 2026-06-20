@@ -27,7 +27,12 @@ async def _fetch_from_eodhd(days: int, pair: str) -> Optional[pd.DataFrame]:
         logger.error("EODHD API klíč není nastaven!")
         return None
 
-    url = f"https://eodhd.com/api/eod/{pair}.FOREX?api_token={settings.eodhd_api_key}&fmt=json&limit={days}&period=d"
+    from datetime import date, timedelta
+    # EODHD ignoruje parametr limit= pro některé symboly (např. XAUUSD.FOREX vrátí celé dějiny).
+    # Používáme from= datum pro spolehlivé omezení dat.
+    from_date = (date.today() - timedelta(days=days + 5)).isoformat()  # +5 jako buffer pro svátky
+    eodhd_symbol = f"{pair}.FOREX"
+    url = f"https://eodhd.com/api/eod/{eodhd_symbol}?api_token={settings.eodhd_api_key}&fmt=json&from={from_date}&period=d"
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -53,7 +58,9 @@ async def _fetch_from_eodhd(days: int, pair: str) -> Optional[pd.DataFrame]:
             if df.empty: return None
             df.set_index("date", inplace=True)
             df.sort_index(inplace=True)
-            return df
+            # Bezpečný ořez — vždy vrátíme pouze posledních `days` řádků
+            # (EODHD někdy vrátí celou historii bez ohledu na limit parameter)
+            return df.iloc[-days:]
             
     except Exception as e:
         logger.error(f"Error fetching price from EODHD: {e}")

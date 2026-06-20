@@ -201,10 +201,12 @@ def score_trend(df: pd.DataFrame) -> float:
         return 0.0
 
     try:
-        df = df.copy()
+        df = df.copy().reset_index(drop=True)  # Resetujeme index, aby _adx() vrátil správnou délku
         df["EMA_20"] = _ema(df["close"], 20)
         df["EMA_50"] = _ema(df["close"], 50)
-        df["ADX_14"] = _adx(df, 14).values
+        adx_series = _adx(df, 14)
+        # _adx() vrací Series s vlastním RangeIndex — přiřadíme jen posledních len(df) hodnot
+        df["ADX_14"] = adx_series.values[:len(df)]
 
         last = df.iloc[-1]
         close  = last["close"]
@@ -238,7 +240,9 @@ def score_trend(df: pd.DataFrame) -> float:
         raw_score = dist_score * alignment_factor * adx_factor
         return float(max(-10.0, min(10.0, raw_score)))
 
-    except Exception:
+    except Exception as e:
+        from loguru import logger
+        logger.warning(f"score_trend exception: {e}")
         return 0.0
 
 
