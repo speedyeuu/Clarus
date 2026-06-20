@@ -91,11 +91,12 @@ async def _fetch_de2y_ecb_fallback() -> Optional[float]:
 async def _fetch_uk2y_eodhd(lookback_days: int = 90) -> Dict[str, float]:
     """
     Stáhne historii UK 2Y Gilts z EODHD (ticker GB2Y.GBOV).
+    Volitelný placený zdroj — pokud API klíč chybí, vrátí prázdný dict.
     Vrací dict {YYYY-MM-DD: float_hodnota}.
     """
     settings = get_settings()
     if not settings.eodhd_api_key or settings.eodhd_api_key == "your-eodhd-key":
-        logger.error("EODHD API klíč není nastaven pro bond_yields!")
+        logger.info("EODHD API klíč není nastaven — UK 2Y Gilts přeskočeny, bude použit fallback na policy rates.")
         return {}
 
     url = f"https://eodhd.com/api/eod/GB2Y.GBOV?api_token={settings.eodhd_api_key}&fmt=json&limit={lookback_days}&period=d"
@@ -199,7 +200,7 @@ async def fetch_2y_yield_histories(
     elif pair == "GBPUSD":
         base_hist = await _fetch_uk2y_eodhd(lookback_days)
         if not base_hist:
-            logger.error("UK 2Y výnosy nedostupné z EODHD — bond spread scoring přeskočen.")
+            logger.warning("UK 2Y výnosy nedostupné z EODHD — použit fallback na policy rate differential.")
             return None
     elif pair == "XAUUSD":
         # Zlato (XAU) nenese žádný úrok (yield = 0.0%)

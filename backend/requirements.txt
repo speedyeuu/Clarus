@@ -27,8 +27,8 @@ supabase==2.9.0
 # Google Gemini (Autoresearch)
 google-generativeai
 
-# EODHD (Seed data + EURIBOR)
-eodhd==1.0.26
+# Tržní data (FOREX + Zlato) — zdarma, bez API klíče
+yfinance
 
 # Utils
 python-dotenv==1.0.1
